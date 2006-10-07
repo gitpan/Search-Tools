@@ -1,17 +1,18 @@
 package Search::Tools::RegExp::Keywords;
 
-use 5.006;
+use 5.008;
 use strict;
 use warnings;
 use Carp;
 
 use base qw( Class::Accessor::Fast );
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 sub new
 {
-    my $class = shift;
+    my $proto = shift;
+    my $class = ref($proto) || $proto;
     my $self  = {};
     bless($self, $class);
     $self->_init(@_);
@@ -25,18 +26,15 @@ sub _init
     @$self{keys %extra} = values %extra;
 
     $self->mk_ro_accessors(
-        qw/
-          wildcard
-          word_characters
-          begin_characters
-          end_characters
-          ignore_first_char
-          ignore_last_char
+        qw(
+          kw
           start_bound
           end_bound
-          kw
-          /
+          ),
+          @Search::Tools::Accessors
     );
+    
+    $self->{debug} ||= $ENV{PERL_DEBUG} || 0;
 }
 
 sub keywords
@@ -68,19 +66,15 @@ Search::Tools::RegExp::Keywords - access regular expressions for keywords
 
 =head1 SYNOPSIS
 
- my $re = Search::Tools::RegExp->new();
+ my $regexp = Search::Tools::RegExp->new();
  
- my $kw = $re->build('the quick brown fox');
- # $kw is a S::T::R::Keywords object
+ my $kw = $regexp->build('the quick brown fox');
  
  for my $w ($kw->keywords)
  {
-    my $re = $kw->re( $w ); # $re is S::T::R::Keyword object
-    
-    # each of these are regular expressions ... suitable for framing
-    my $h = $re->html;
-    my $p = $re->plain;
+    my $r = $kw->re( $w );
  }
+
  
  
 =head1 DESCRIPTION
@@ -88,13 +82,24 @@ Search::Tools::RegExp::Keywords - access regular expressions for keywords
 Search::Tools::RegExp::Keywords provides access to the regular expressions
 for a query keyword.
 
+A Search::Tools::RegExp::Keywords object is returned by the Search::Tools::RegExp
+build() method. This class is typically not used in isolation.
+
 
 =head1 METHODS
 
+In addition, a Search::Tools::RegExp::Keywords object inherits from its parent
+Search::Tools::RegExp object the common
+accessors defined in @Search::Tools::Accessors. Since a S::T::R::Keywords object
+doesn't modify anything, you should consider those common accessors as accessors
+only, not mutators.
+
+The following methods are available.
 
 =head2 new
 
-Instantiate an object. This method is used internally by Search::Tools::RegExp->build().
+Create an object. Used internally.
+
 
 =head2 keywords
 
@@ -104,26 +109,6 @@ as they appeared in the original query.
 =head2 re( I<keyword> )
 
 Returns a Search::Tools::RegExp::Keyword object corresponding to I<keyword>.
-
-=head2 wildcard
-
-The wildcard character used in constructing the regular expressions. This
-value is inherited from S::T::RegExp.
-
-=head2 word_characters
-
-The regular expression class used in constructing the regular expressions. This
-value is inherited from S::T::RegExp.
-
-=head2 ignore_first_char
-
-The regular expression class used in constructing the regular expressions. This
-value is inherited from S::T::RegExp.
-
-=head2 ignore_last_char
-
-The regular expression class used in constructing the regular expressions. This
-value is inherited from S::T::RegExp.
 
 =head2 kw
 

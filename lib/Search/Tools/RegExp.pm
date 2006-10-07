@@ -12,7 +12,7 @@ use Search::Tools::XML;
 
 use base qw( Class::Accessor::Fast );
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 my %char2entity = ();
 while (my ($e, $n) = each(%Search::Tools::XML::HTML_ents))
@@ -34,21 +34,21 @@ for (0 .. 255)
 # unless HTML::Parser is used
 our $TagRE = qr/<[^>]+>/s;
 
-# takes 2x as long to match a real utf8 char but that's the cost of being more thorough
-our $UTF8Char = qr/\p{L}\p{M}*/;
-
-#our $UTF8Char = '\w';
-
-our $WordChar    = "$UTF8Char./-";
-our $BegChar     = "$UTF8Char./-";
-our $EndChar     = $UTF8Char;
+# takes 2x as long to match against the long version
+# and perl treats \w equally well against diacritics.
+# see example/utf8re.pl
+#our $UTF8Char = qr/\p{L}\p{M}*/;
+our $UTF8Char = '\w';
+our $WordChar = $UTF8Char . quotemeta("'-.");   # contractions and compounds ok.
+our $IgnFirst = quotemeta("'-");
+our $IgnLast  = quotemeta("'-.");
 our $PhraseDelim = '"';
+our $Wildcard    = '*';
 
 # regexp for what constitutes whitespace in an HTML doc
 # it's not as simple as \s|&nbsp; so we define it separately
 
-# NOTE that the pound sign # seems to need escaping, though that seems like a perl bug to me.
-# Mon Sep 20 11:34:04 CDT 2004
+# NOTE that the pound sign # needs escaping because we use the 'x' flag in our regexp.
 
 my @whitesp = (
                '&\#0020;', '&\#0009;', '&\#000C;', '&\#200B;',
@@ -60,7 +60,8 @@ our $WhiteSpace = join('|', @whitesp);
 
 sub new
 {
-    my $class = shift;
+    my $proto = shift;
+    my $class = ref($proto) || $proto;
     my $self  = {};
     bless($self, $class);
     $self->_init(@_);
@@ -74,41 +75,24 @@ sub _init
     @$self{keys %extra} = values %extra;
 
     $self->mk_accessors(
-        qw/
+        qw(
           kw
-          kw_opts
-          wildcard
-          word_characters
-          begin_characters
-          end_characters
           start_bound
           end_bound
-          ignore_first_char
-          ignore_last_char
-          stemmer
-
-          /
+          ),
+        @Search::Tools::Accessors
     );
 
-    $self->{wildcard} ||= $self->{kw_opts}->{wildcard} || '*';
-    $self->{word_characters}  ||= $WordChar;
-    $self->{end_characters}   ||= $EndChar;
-    $self->{begin_characters} ||= $BegChar;
+    $self->{debug} ||= $ENV{PERL_DEBUG} || 0;
+    $self->{wildcard}          ||= $Wildcard;
+    $self->{word_characters}   ||= $WordChar;
+    $self->{ignore_first_char} ||= $IgnFirst;
+    $self->{ignore_last_char}  ||= $IgnLast;
+    $self->{phrase_delim}      ||= $PhraseDelim;
 
     $self->kw(
               Search::Tools::Keywords->new(
-                          %{
-                              $self->kw_opts
-                                || {
-                                  ignore_first_char => $self->ignore_first_char,
-                                  ignore_last_char  => $self->ignore_last_char,
-                                  wildcard          => $self->wildcard,
-                                  stemmer           => $self->stemmer,
-                                  word_characters   => $self->word_characters,
-                                  begin_characters  => $self->begin_characters,
-                                  end_characters    => $self->end_characters
-                                }
-                            }
+                               map { $_ => $self->$_ } @Search::Tools::Accessors
               )
              )
       unless $self->kw;
@@ -117,10 +101,7 @@ sub _init
     # since &lt; or &gt; can be indexed as literal < and >
     # but this causes a great deal of hassle
     # so we just ignore them.
-    for (qw(word_characters end_characters begin_characters))
-    {
-        $self->{$_} =~ s,[<>&],,g;
-    }
+    $self->{word_characters} =~ s,[<>&],,g;
 
     # what's the boundary between a word and a not-word?
     # by default:
@@ -133,8 +114,11 @@ sub _init
     # against the beginning or end of a tagset
     # like <p>Word or Word</p>
 
-    $self->{start_bound} ||= join(
-        '|',
+    my $igf =
+      $self->ignore_first_char ? qr/[$self->{ignore_first_char}]*/i : '';
+    my $igl = $self->ignore_last_char ? qr/[$self->{ignore_last_char}]*/i : '';
+
+    my @start_bound = (
         '\A',
         '[>]',
         '(?:&[\w\#]+;)',    # because a ; might be a legitimate wordchar
@@ -143,21 +127,25 @@ sub _init
                             # this might give unexpected results.
                             # NOTE that &nbsp; etc is in $WhiteSpace
         $WhiteSpace,
-        '[^' . $self->begin_characters . ']'
-                                 );
+        '[^' . $self->{word_characters} . ']'
+                      );
 
-    $self->{end_bound} ||=
-      join('|', '\Z', '[<&]', $WhiteSpace, '[^' . $self->end_characters . ']');
+    push(@start_bound, $igf) if $igf;
+
+    my @end_bound =
+      ('\Z', '[<&]', $WhiteSpace, '[^' . $self->{word_characters} . ']');
+
+    push(@end_bound, $igl) if $igl;
+
+    $self->{start_bound} ||= join('|', @start_bound);
+
+    $self->{end_bound} ||= join('|', @end_bound);
 
     # the whitespace in a query phrase might be:
     #	any ignore_last_char, followed by
     #	one or more nonwordchar or whitespace, followed by
     #	any ignore_first_char
     # define for both text and html
-
-    my $igf =
-      $self->ignore_first_char ? qr/[$self->{ignore_first_char}]*/i : '';
-    my $igl = $self->ignore_last_char ? qr/[$self->{ignore_last_char}]*/i : '';
 
     $self->{text_phrase_bound} = join '', $igl,
       qr/[\s\x20]|[^$self->{word_characters}]/is, '+', $igf;
@@ -181,26 +169,22 @@ sub build
         my ($plain, $html) = $self->_build($q);
         $q2regexp->{$q} =
           Search::Tools::RegExp::Keyword->new(
-                                              plain => $plain,
-                                              html  => $html,
-                                              word  => $q
+                                              plain  => $plain,
+                                              html   => $html,
+                                              word   => $q,
+                                              phrase => $q =~ m/\ / ? 1 : 0
                                              );
 
     }
 
     my $kw =
       Search::Tools::RegExp::Keywords->new(
-                                  hash              => $q2regexp,
-                                  array             => $q_array,
-                                  wildcard          => $self->wildcard,
-                                  word_characters   => $self->word_characters,
-                                  begin_characters  => $self->begin_characters,
-                                  end_characters    => $self->end_characters,
-                                  ignore_first_char => $self->ignore_first_char,
-                                  ignore_last_char  => $self->ignore_last_char,
-                                  start_bound       => $self->start_bound,
-                                  end_bound         => $self->end_bound,
-                                  kw                => $self->kw,
+                               hash        => $q2regexp,
+                               array       => $q_array,
+                               kw          => $self->kw,
+                               start_bound => $self->start_bound,
+                               end_bound   => $self->end_bound,
+                               map { $_ => $self->$_ } @Search::Tools::Accessors
       );
 
     return $kw;
@@ -210,11 +194,10 @@ sub _build
 {
     my $self      = shift;
     my $q         = shift or croak "need query to build()";
-    my $wild      = $self->{end_characters};
-    my $begchars  = $self->{begin_characters};
+    my $wild      = $self->word_characters;
     my $st_bound  = $self->{start_bound};
     my $end_bound = $self->{end_bound};
-    my $wc        = $self->{word_characters};
+    my $wc        = $self->word_characters;
     my $tpb       = $self->{text_phrase_bound};
     my $hpb       = $self->{html_phrase_bound};
     my $wildcard  = $self->wildcard;
@@ -229,13 +212,13 @@ sub _build
 
     $plain = qr/
 (
-\A|[^$begchars]
+\A|$tpb
 )
 (
 ${escaped}
 )
 (
-[^$wild]|\Z
+\Z|$tpb
 )
 /xis;
 
@@ -302,44 +285,131 @@ Search::Tools::RegExp - build regular expressions from search queries
 
 =head1 SYNOPSIS
 
- my $re = Search::Tools::RegExp->new();
+ my $regexp = Search::Tools::RegExp->new();
  
- my $kw = $re->build('the quick brown fox');
+ my $kw = $regexp->build('the quick brown fox');
  
  for my $w ($kw->keywords)
  {
-    my $re = $kw->re( $w );
+    my $r = $kw->re( $w );
+    
+    # the word itself
+    printf("the word is %s\n", $r->word);
+    
+    # is it flagged as a phrase?
+    print "the word is a phrase\n" if $r->phrase;
     
     # each of these are regular expressions
-    print $re->plain;
-    print $re->html;
+    print $r->plain;
+    print $r->html;
  }
  
- 
+
 =head1 DESCRIPTION
 
+Build regular expressions for a string of text.
+
+All text is converted to UTF-8 automatically if it isn't already,
+via the Search:Tools::Keywords module.
+
+
+=head1 VARIABLES
+
+The following package variables are defined:
+
+=over
+
+=item UTF8Char
+
+Regexp defining a valid UTF-8 word character. Default C<\w>.
+
+=item WordChar
+
+Default word_characters regexp. Defaults to C<UTF8Char> plus C<'>, C<.> and C<->.
+
+=item IgnFirst
+
+Default ignore_first_char regexp. Defaults to C<'> and C<->.
+
+=item IgnLast
+
+Default ignore_last_char regexp. Defaults to C<'>, C<.> and C<->.
+
+=item PhraseDelim
+
+Phrase delimiter character. Default is double-quote '"'.
+
+=item Wildcard
+
+Character to use as a wildcard. Default is asterik '*'.
+
+=back
 
 
 =head1 METHODS
 
 =head2 new
 
-=head2 isHTML
+Create new object. The following parameters are also accessors:
 
-=head2 build
+=over
 
+=item kw
 
-=head1 VARIABLES
+A Search::Tools::Keywords object, if you want to pass in one instead of having
+one made for you.
+
+=item wildcard
+
+The wildcard character. Default is C<$Wildcard>.
+
+=item word_characters
+
+Regexp for what characters constitute a 'word'. Default is C<$WordChar>.
+
+=item ignore_first_char
+
+Default is C<$IgnFirst>.
+
+=item ignore_last_char
+
+Default is C<$IgnLast>.
+
+=item stemmer
+
+Stemming code ref passed through to the default Search::Tools::Keywords object.
+
+=item phrase_delim
+
+Phrase delimiter. Defaults to C<$PhraseDelim>.
+
+=item stopwords
+
+Words to be ignored.
+
+=item debug
+
+Turn on helpful info on stderr.
+
+=back
+
+=head2 isHTML( I<str> )
+
+Returns true if I<str> contains anything that looks like HTML markup: 
+
+ < > or &[#\w]+;
+
+This is a naive check but useful for internal purposes.
+
+=head2 build( I<str> )
+
+Returns a Search::Tools::RegExp::Keywords object.
 
 
 =head1 BUGS and LIMITATIONS
 
-All new() params should be flagged as UTF-8 strings. If you include non-ASCII chars
-in your regular expressions, etc., you should convert them first to UTF-8 with the standard
-Encode module.
-
-The special HTML chars < and > can pose problems in regexps against markup, so they
-are ignored in any regexp params you pass to new().
+The special HTML chars &, < and > can pose problems in regexps against markup, so they
+are ignored if you include them in C<word_characters> in new().
 
 =head1 AUTHOR
 

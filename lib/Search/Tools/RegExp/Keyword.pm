@@ -1,19 +1,20 @@
 package Search::Tools::RegExp::Keyword;
 
-use 5.006;
+use 5.008;
 use strict;
 use warnings;
 use Carp;
 
 use base qw( Class::Accessor::Fast );
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
-__PACKAGE__->mk_ro_accessors(qw/plain html word/);
+__PACKAGE__->mk_ro_accessors(qw/plain html word phrase/);
 
 sub new
 {
-    my $class = shift;
+    my $proto = shift;
+    my $class = ref($proto) || $proto;
     my $self  = {};
     bless($self, $class);
     $self->_init(@_);
@@ -25,6 +26,8 @@ sub _init
     my $self  = shift;
     my %extra = @_;
     @$self{keys %extra} = values %extra;
+    
+    $self->{debug} ||= $ENV{PERL_DEBUG} || 0;
 }
 
 1;
@@ -38,9 +41,9 @@ Search::Tools::RegExp::Keyword - access regular expressions for a keyword
 
 =head1 SYNOPSIS
 
- my $re = Search::Tools::RegExp->new();
+ my $regexp = Search::Tools::RegExp->new();
  
- my $kw = $re->build('the quick brown fox');
+ my $kw = $regexp->build('the quick brown fox');
  
  for my $w ($kw->keywords)
  {
@@ -68,15 +71,17 @@ for a query keyword.
 
 =head1 METHODS
 
-
 =head2 new
 
-Instantiate an object. This method is used internally by Search::Tools::RegExp->build().
-
+Create an object. Used internally.
 
 =head2 word
 
 Returns the original keyword on which the regular expressions are based.
+
+=head2 phrase
+
+Returns true if the keyword was treated as a phrase.
 
 =head2 plain
 

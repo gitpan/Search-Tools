@@ -12,7 +12,20 @@ use Search::Tools::HiLiter;
 use Search::Tools::Transliterate;
 use Search::Tools::XML;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
+
+# accessors that every object should inherit from its parent
+our @Accessors = qw(
+    stopwords
+    wildcard
+    word_characters
+    ignore_first_char
+    ignore_last_char
+    stemmer
+    phrase_delim
+    debug
+    
+    );
 
 sub regexp
 {
@@ -133,6 +146,21 @@ parameter.
 
 =head2 hiliter
 
+
+=head1 COMMON ACCESSORS
+
+The following common accessors are inherited by every module in Search::Tools:
+
+    stopwords
+    wildcard
+    word_characters
+    ignore_first_char
+    ignore_last_char
+    stemmer
+    phrase_delim
+    debug
+
+See each module's documentation for more details.
 
 =head1 AUTHOR
 
