@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Search-Tools
-version:             0.12
+version:             0.13
 abstract:            tools for building search applications
 license:             ~
 generated_by:        ExtUtils::MakeMaker version 6.36
@@ -9,6 +9,7 @@ requires:
     Class::Accessor::Fast:         0.1
     Data::Dump:                    0
     Encode:                        0.1
+    File::Slurp:                   0
     Search::QueryParser:           0.1
     Text::Aspell:                  0.06
 meta-spec:
