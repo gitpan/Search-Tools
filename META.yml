@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Search-Tools
-version:             0.17
+version:             0.18
 abstract:            tools for building search applications
 license:             ~
 author:              
@@ -13,7 +13,6 @@ requires:
     Encode:                        0.1
     File::Slurp:                   0
     Search::QueryParser:           0.1
-    Text::Aspell:                  0.06
 meta-spec:
     url:     http://module-build.sourceforge.net/META-spec-v1.3.html
     version: 1.3
