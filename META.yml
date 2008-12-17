@@ -1,18 +1,24 @@
 --- #YAML:1.0
-name:                Search-Tools
-version:             0.19
-abstract:            tools for building search applications
-license:             ~
-author:              
+name:               Search-Tools
+version:            0.20
+abstract:           tools for building search applications
+author:
     -  Peter Karman <perl@peknet.com>
-generated_by:        ExtUtils::MakeMaker version 6.42
-distribution_type:   module
-requires:     
-    Class::Accessor::Fast:         0.1
-    Data::Dump:                    0
-    Encode:                        0.1
-    File::Slurp:                   0
-    Search::QueryParser:           0.1
+license:            unknown
+distribution_type:  module
+configure_requires:
+    ExtUtils::MakeMaker:  0
+requires:
+    Class::Accessor::Fast:  0.1
+    Data::Dump:           0
+    Encode:               0.1
+    File::Slurp:          0
+    Search::QueryParser:  0.1
+no_index:
+    directory:
+        - t
+        - inc
+generated_by:       ExtUtils::MakeMaker version 6.46
 meta-spec:
-    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
-    version: 1.3
+    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
+    version:  1.4
