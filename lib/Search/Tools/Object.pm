@@ -2,8 +2,13 @@ package Search::Tools::Object;
 use strict;
 use warnings;
 use Carp;
-use base qw( Class::Accessor::Fast );
-use Search::Tools;
+use base qw( Rose::Object );
+use Scalar::Util qw( blessed );
+use Search::Tools::MethodMaker;
+
+our $VERSION = '0.24';
+
+__PACKAGE__->mk_accessors(qw( debug ));
 
 =pod
 
@@ -11,27 +16,132 @@ use Search::Tools;
 
 Search::Tools::Object - base class for Search::Tools objects
 
+=head1 SYNOPSIS
+
+ package MyClass;
+ use base qw( Search::Tools::Object );
+ 
+ __PACKAGE__->mk_accessors( qw( foo bar ) );
+ 
+ sub init {
+    my $self = shift;
+    $self->SUPER::init(@_);
+
+    # do stuff to set up object
+    
+ }
+ 
+ 1;
+ 
+ # elsewhere
+ 
+ use MyClass;
+ my $object = MyClass->new;
+ $object->foo(123);
+ print $object->bar . "\n";
+
+=head1 DESCRIPTION
+
+Search::Tools::Object is a subclass of Rose::Object. Prior to version 0.24
+STO was a subclass of Class::Accessor::Fast. Backwards compatability for
+the mk_accessors() and mk_ro_accessors() class methods are preserved
+via Search::Tools::MethodMaker.
+
 =head1 METHODS
-
-=head2 new( I<args> )
-
-I<args> should be a hash.
 
 =cut
 
-__PACKAGE__->mk_accessors(qw( debug ));
+sub _init {
+    croak "use init() instead";
+}
 
-sub new {
-    my $class = shift;
-    my $args  = ref( $_[0] ) eq 'HASH' ? shift(@_) : {@_};
-    my $self  = $class->SUPER::new($args);
-    $self->_init(@_);
+=head2 init
+
+Overrides base Rose::Object method. Rather than calling
+the method name for each param passed in new(), the value
+is simply set in the object as a hash ref. This assumes
+every Search::Tools::Object is a blessed hash ref.
+
+The reason the hash is preferred over the method call
+is to support read-only accessors, which will croak
+if init() tried to set values with them.
+
+=cut
+
+sub init {
+    my $self = shift;
+
+    # assume object is hash and set key
+    # rather than call method, since we have read-only methods.
+    while (@_) {
+        my $method = shift;
+        $self->{$method} = shift;
+    }
+    $self->{debug} ||= $ENV{PERL_DEBUG} || 0;
     return $self;
 }
 
-sub _init {
+=head2 debug( I<n> )
+
+Get/set the debug value for the object. All objects inherit this attribute.
+You can use the C<PERL_DEBUG> env var to set this value as well.
+
+=cut
+
+# backcompat for CAF
+
+=head2 mk_accessors( I<array_of_accessor_names> )
+
+Works like CAF.
+
+=cut
+
+sub mk_accessors {
+    my $class = shift;
+    Search::Tools::MethodMaker->make_methods( { target_class => $class },
+        scalar => \@_ );
+}
+
+=head2 mk_ro_accessors( I<array_of_accessor_names> )
+
+Works like CAF.
+
+=cut
+
+sub mk_ro_accessors {
+    my $class = shift;
+    Search::Tools::MethodMaker->make_methods( { target_class => $class },
+        'scalar --ro' => \@_ );
+}
+
+sub _normalize_args {
     my $self = shift;
-    $self->{debug} ||= $ENV{PERL_DEBUG} || 0;
+    my %args = @_;
+    my $q    = delete $args{query};
+    if ( !defined $q ) {
+        croak "query required";
+    }
+    if ( !ref($q) ) {
+        $args{query} = Search::Tools::QueryParser->new(%args)->parse($q);
+    }
+    elsif ( ref($q) eq 'ARRAY' ) {
+        warn "query ARRAY ref deprecated as of version 0.24";
+        $args{query} = Search::Tools::QueryParser->new(%args)
+            ->parse( join( ' ', @$q ) );
+    }
+    elsif ( blessed($q) and $q->isa('Search::Tools::Query') ) {
+        $args{query} = $q;
+    }
+    elsif ( blessed($q) and $q->isa('Search::Tools::RegExp::Keywords') ) {
+
+        # backcompat
+        $args{query} = Search::Tools::Query->from_regexp_keywords($q);
+    }
+    else {
+        croak
+            "query param required to be a scalar string or Search::Tools::Query object";
+    }
+    return %args;
 }
 
 1;
@@ -40,17 +150,51 @@ __END__
 
 =head1 AUTHOR
 
-Peter Karman C<perl@peknet.com>
+Peter Karman C<< <karman@cpan.org> >>
+
+=head1 BUGS
+
+Please report any bugs or feature requests to C<bug-search-tools at rt.cpan.org>, or through
+the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Search-Tools>.  
+I will be notified, and then you'll
+automatically be notified of progress on your bug as I make changes.
+
+=head1 SUPPORT
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc Search::Tools
+
+
+You can also look for information at:
+
+=over 4
+
+=item * RT: CPAN's request tracker
+
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Search-Tools>
+
+=item * AnnoCPAN: Annotated CPAN documentation
+
+L<http://annocpan.org/dist/Search-Tools>
+
+=item * CPAN Ratings
+
+L<http://cpanratings.perl.org/d/Search-Tools>
+
+=item * Search CPAN
+
+L<http://search.cpan.org/dist/Search-Tools/>
+
+=back
 
 =head1 COPYRIGHT
 
-Copyright 2007 by Peter Karman.
+Copyright 2009 by Peter Karman.
 
 This package is free software; you can redistribute it and/or modify it under the 
 same terms as Perl itself.
 
 =head1 SEE ALSO
 
-Search::Tools
-
-=cut
+Search::QueryParser

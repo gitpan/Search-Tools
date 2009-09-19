@@ -2,10 +2,9 @@ package Search::Tools::XML;
 use strict;
 use warnings;
 use Carp;
-use Search::Tools::RegExp;
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 
 =pod
 
@@ -81,6 +80,19 @@ our %Ents = (
     "'" => '&apos;'
 );
 my $ToEscape = join( '', keys %Ents );
+
+# regexp for what constitutes whitespace in an HTML doc
+# it's not as simple as \s|&nbsp; so we define it separately
+
+# NOTE that the pound sign # needs escaping because we use
+# the 'x' flag in our regexp.
+
+my @whitesp = (
+    '&\#0020;', '&\#0009;', '&\#000C;', '&\#200B;', '&\#2028;', '&\#2029;',
+    '&nbsp;',   '&\#32;',   '&\#160;',  '\s',       '\xa0',     '\x20',
+);
+
+my $whitespace = join( '|', @whitesp );
 
 # HTML entity table
 # this just removes a dependency on another module...
@@ -341,6 +353,20 @@ our %HTML_ents = (
     diams    => 9830,
 );
 
+my %char2entity = ();
+while ( my ( $e, $n ) = each(%HTML_ents) ) {
+    my $char = chr($n);
+    $char2entity{$char} = "&$e;";
+}
+delete $char2entity{q/'/};    # only one-way decoding
+
+# Fill in missing entities
+# TODO does this only work under latin1 locale?
+for ( 0 .. 255 ) {
+    next if exists $char2entity{ chr($_) };
+    $char2entity{ chr($_) } = "&#$_;";
+}
+
 =head1 METHODS
 
 The following methods may be accessed either as object or class methods.
@@ -350,6 +376,52 @@ The following methods may be accessed either as object or class methods.
 Create a Search::Tools::XML object.
 
 =cut
+
+=head2 tag_re
+
+Returns a qr// regex for matching a SGML (XML, HTML, etc) tag.
+
+=cut
+
+sub tag_re {qr/<[^>]+>/s}
+
+=head2 html_whitespace
+
+Returns a regex for all whitespace characters and
+HTML whitespace entities.
+
+=cut
+
+sub html_whitespace {$whitespace}
+
+=head2 char2ent_map
+
+Returns a hash reference to the class data mapping chr() values to their
+numerical entity equivalents.
+
+=cut
+
+sub char2ent_map { \%char2entity }
+
+=head2 looks_like_html( I<string> )
+
+Returns true if I<string> appears to have HTML-like markup in it.
+
+Aliases for this method include:
+
+=over
+
+=item looks_like_xml
+
+=item looks_like_markup
+
+=back
+
+=cut
+
+sub looks_like_html { return $_[1] =~ m/[<>]|&[\#\w]+;/o }
+*looks_like_xml    = \&looks_like_html;
+*looks_like_markup = \&looks_like_html;
 
 =head2 start_tag( I<string> )
 
@@ -429,14 +501,23 @@ I<text> is returned with no markup in it.
 
 sub no_html {
     my $class = shift;
-    my $text = shift or croak "need text to strip HTML from";
-
-    $text =~ s,$Search::Tools::RegExp::TagRE,,g;
-
-    $class->unescape($text);
-
+    my $text  = shift;
+    if ( !defined $text ) {
+        croak "text required";
+    }
+    my $re = $class->tag_re;
+    $text =~ s,$re,,g;
+    $text = $class->unescape($text);
     return $text;
 }
+
+=head2 strip_html
+
+An alias for no_html().
+
+=cut
+
+*strip_html = \&no_html;
 
 =head2 escape( I<text> )
 
@@ -466,15 +547,15 @@ dependency. unescape() will convert all entities to their chr() equivalents.
 B<NOTE:> unescape() does more than reverse the effects of escape(). It attempts
 to resolve B<all> entities, not just the special XML entities (><'"&).
 
-B<IMPORTANT:> The API for this method has changed as of version 0.16. I<text> is no longer
-modified in-place.
+B<IMPORTANT:> The API for this method has changed as of version 0.16. 
+I<text> is no longer modified in-place.
 
 =cut
 
 sub unescape {
     my ( $self, $text ) = @_;
-    $self->unescape_named($text);
-    $self->unescape_decimal($text);
+    $text = $self->unescape_named($text);
+    $text = $self->unescape_decimal($text);
     return $text;
 }
 
@@ -482,58 +563,101 @@ sub unescape {
 
 Replace all named HTML entities with their chr() equivalents.
 
-I<text> is modified in place.
+Returns modified copy of I<text>.
 
 =cut
 
 sub unescape_named {
-    if ( defined( $_[1] ) ) {
+    my $t = pop;
+    if ( defined($t) ) {
 
         # named entities - check first to see if it is worth looping
-        if ( $_[1] =~ m/&[a-zA-Z]+;/ ) {
+        if ( $t =~ m/&[a-zA-Z]+;/ ) {
             for ( keys %HTML_ents ) {
-                my $n = $HTML_ents{$_};
-                $_[1] =~ s/&$_;/chr($n)/eg;
+                if ( my $n = $t =~ s/&$_;/chr($HTML_ents{$_})/eg ) {
+
+                    #warn "replaced $_ -> $HTML_ents{$_} $n times in text";
+                }
             }
         }
     }
-    return $_[1];
+    return $t;
 }
 
 =head2 unescape_decimal( I<text> )
 
 Replace all decimal entities with their chr() equivalents.
 
-I<text> is modified in place.
+Returns modified copy of I<text>.
 
 =cut
 
 sub unescape_decimal {
+    my $t = pop;
 
     # resolve numeric entities as best we can
-    $_[1] =~ s/&#(\d+);/chr($1)/ego if defined( $_[1] );
-    return $_[1];
+    $t =~ s/&#(\d+);/chr($1)/ego if defined($t);
+    return $t;
 }
 
 1;
 __END__
 
-
 =head1 AUTHOR
 
-Peter Karman C<perl@peknet.com>
+Peter Karman C<< <karman@cpan.org> >>
 
-Based on the CrayDoc regular expression building code, originally by the same author, 
-copyright 2004 by Cray Inc.
+Originally based on the HTML::HiLiter regular expression building code, 
+by the same author, copyright 2004 by Cray Inc.
+
+Thanks to Atomic Learning C<www.atomiclearning.com> 
+for sponsoring the development of these modules.
+
+=head1 BUGS
+
+Please report any bugs or feature requests to C<bug-search-tools at rt.cpan.org>, or through
+the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Search-Tools>.  
+I will be notified, and then you'll
+automatically be notified of progress on your bug as I make changes.
+
+=head1 SUPPORT
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc Search::Tools
+
+
+You can also look for information at:
+
+=over 4
+
+=item * RT: CPAN's request tracker
+
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Search-Tools>
+
+=item * AnnoCPAN: Annotated CPAN documentation
+
+L<http://annocpan.org/dist/Search-Tools>
+
+=item * CPAN Ratings
+
+L<http://cpanratings.perl.org/d/Search-Tools>
+
+=item * Search CPAN
+
+L<http://search.cpan.org/dist/Search-Tools/>
+
+=back
 
 =head1 COPYRIGHT
 
-Copyright 2006 by Peter Karman. 
+Copyright 2006-2009 by Peter Karman.
+
 This package is free software; you can redistribute it and/or modify it under the 
 same terms as Perl itself.
 
 =head1 SEE ALSO
 
-Search::Tools
+HTML::HiLiter, SWISH::HiLiter, Rose::Object, Class::XSAccessor, Text::Aspell
 
 =cut

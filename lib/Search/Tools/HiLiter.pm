@@ -1,53 +1,35 @@
 package Search::Tools::HiLiter;
 use strict;
 use warnings;
-use Carp;
-use Search::Tools::RegExp;
-
 use base qw( Search::Tools::Object );
+use Carp;
+use Search::Tools::XML;
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
+
+my $XML = Search::Tools::XML->new;
 
 __PACKAGE__->mk_accessors(
     qw(
         query
-        rekw
         tag
         class
+        style
+        text_color
         colors
         tty
         ttycolors
         no_html
-        ),
-    @Search::Tools::Accessors
+        )
 );
 
-sub _init {
+sub init {
     my $self = shift;
-    $self->SUPER::_init(@_);
+    my %args = $self->_normalize_args(@_);
+    $self->SUPER::init(%args);
 
     if ( $self->debug ) {
         carp "debug level set at " . $self->debug;
-    }
-
-    if ( !$self->query ) {
-        croak "query required.";
-    }
-    elsif ( ref $self->query eq 'ARRAY' or !ref $self->query ) {
-        my $re = Search::Tools::RegExp->new( map { $_ => $self->$_ }
-                @Search::Tools::Accessors );
-        $self->rekw( $re->build( $self->query ) );
-    }
-    elsif ( $self->query->isa('Search::Tools::RegExp::Keywords') ) {
-        $self->rekw( $self->query );
-    }
-    else {
-        croak
-            "query must be either a string or Search::Tools::RegExp::Keywords object";
-    }
-
-    unless ( $self->rekw ) {
-        croak "Search:Tools::RegExp::Keywords object required";
     }
 
     $self->{tag} ||= 'span';
@@ -62,19 +44,24 @@ sub _init {
     $self->_build_tags;
 }
 
+sub terms {
+    return shift->{query}->terms;
+}
+
 sub keywords {
-    my $self = shift;
-    return $self->rekw->keywords;
+    return @{ shift->terms };
 }
 
 sub _phrases {
     my $self = shift;
-    return grep { $self->rekw->re($_)->phrase } $self->keywords;
+    my $q    = $self->{query};
+    return grep { $q->regex_for($_)->is_phrase } @{ $q->terms };
 }
 
 sub _singles {
     my $self = shift;
-    return grep { !$self->rekw->re($_)->phrase } $self->keywords;
+    my $q    = $self->{query};
+    return grep { !$q->regex_for($_)->is_phrase } @{ $q->terms };
 }
 
 sub _kworder {
@@ -101,24 +88,34 @@ sub _build_tags {
         # if tty flag is on, use ansicolor instead of html
         # if debug flag is on, use both html and ansicolor
 
-        my ( %tags, $hO );
+        my ( %tags, $opener );
         $tags{open}  = '';
         $tags{close} = '';
         if ( $self->class ) {
-            $hO = qq/<$tag class="/ . $self->class . qq/">/;
+            $opener = qq/<$tag class="/ . $self->class . qq/">/;
+        }
+        elsif ( $self->style ) {
+            $opener = qq/<$tag style="/ . $self->style . qq/">/;
+        }
+        elsif ( $self->text_color ) {
+            $opener
+                = qq/<$tag style="color:/
+                . $self->text_color
+                . qq/;background:/
+                . $colors[$n] . qq/">/;
         }
         else {
-            $hO = qq/<$tag style="background:/ . $colors[$n] . qq/">/;
+            $opener = qq/<$tag style="background:/ . $colors[$n] . qq/">/;
         }
 
         if ( $self->tty ) {
-            $tags{open} .= $hO if $self->debug && !$self->no_html;
+            $tags{open} .= $opener if $self->debug && !$self->no_html;
             $tags{open}  .= Term::ANSIColor::color( $ttycolors[$m] );
             $tags{close} .= Term::ANSIColor::color('reset');
             $tags{close} .= "</$tag>" if $self->debug && !$self->no_html;
         }
         else {
-            $tags{open}  .= $hO;
+            $tags{open}  .= $opener;
             $tags{close} .= "</$tag>";
         }
 
@@ -147,13 +144,19 @@ sub light {
     my $self = shift;
     my $text = shift or return '';
 
-    if ( Search::Tools::RegExp->isHTML($text) && !$self->no_html ) {
+    if ( $XML->looks_like_html($text) && !$self->no_html ) {
+
+        #warn "running ->html";
         return $self->html($text);
     }
     else {
+
+        #warn "running ->plain";
         return $self->plain($text);
     }
 }
+
+*hilite = \&light;
 
 sub _get_real_html {
     my $self = shift;
@@ -201,7 +204,7 @@ sub html {
     # use our prebuilt regexp
 
 Q: for my $query ( $self->_kworder ) {
-        my $re = $self->rekw->re($query)->html;
+        my $re = $self->query->regex_for($query)->html;
         my $real = $self->_get_real_html( \$text, $re );
 
     R: for my $r ( keys %$real ) {
@@ -237,8 +240,8 @@ sub _add_hilite_tags {
     # $html is the real html that matched our regexp
 
     # we still check boundaries just to be safe
-    my $st_bound  = $self->rekw->start_bound;
-    my $end_bound = $self->rekw->end_bound;
+    my $st_bound  = $self->query->qp->start_bound;
+    my $end_bound = $self->query->qp->end_bound;
 
     my $o = $self->open_tag($query);
     my $c = $self->close_tag($query);
@@ -247,7 +250,8 @@ sub _add_hilite_tags {
 
     # pre-fix nested tags in match
     my $pre_fixed = $html;
-    my $pre_added = $pre_fixed =~ s($Search::Tools::RegExp::TagRE+)$c$1$og;
+    my $tag_re    = $self->query->qp->tag_re;
+    my $pre_added = $pre_fixed =~ s(${tag_re}+)$c$1$og;
     my $len_added = length( $c . $o ) * $pre_added;
 
     # should be same as length( $to_hilite) - length( $prefixed );
@@ -343,12 +347,17 @@ sub plain {
     my $self = shift;
     my $text = shift or croak "need text to light()";
 
-Q: for my $query ( $self->_kworder ) {
-        my $re = $self->rekw->re($query)->plain;
-        my $o  = $self->open_tag($query);
-        my $c  = $self->close_tag($query);
+    my $query_obj = $self->{query};
 
-        $self->debug > 1 and carp "looking for: $re against $query";
+Q: for my $query ( $self->_kworder ) {
+        my $re            = $query_obj->regex_for($query)->plain;
+        my $o             = $self->open_tag($query);
+        my $c             = $self->close_tag($query);
+        my $length_we_add = length( $o . $c ) - 1;
+
+        $self->debug > 1
+            and carp
+            "plain hiliter looking for: $re against '$query' in '$text'";
 
         # because s// fails to find duplicate instances like 'foo foo'
         # we use a while loop and increment pos()
@@ -356,16 +365,25 @@ Q: for my $query ( $self->_kworder ) {
         # this can suck into an infinite loop because increm pos()-- results
         # in repeated match on nonwordchar: > (since we just added a tag)
 
+        if ( $self->debug ) {
+            if ( $text =~ m/$query/i && $text !~ m/$re/ ) {
+                croak "bad regex for '$query': $re";
+            }
+        }
+
+        my $found_matches = 0;
         while ( $text =~ m/$re/g ) {
 
             my $s = $1 || '';
             my $m = $2 || $query;
             my $e = $3 || '';
 
+            $found_matches++;
+
             $self->debug > 1 and carp "matched $s $m $e against $re";
 
-        # use substr to do what s// would normally do if pos() wasn't an issue
-        # -- is this a big speed diff?
+            # use substr to do what s/// would normally do
+            # if pos() wasn't an issue -- is this a big speed diff?
             my $len       = length( $s . $m . $e );
             my $pos       = pos($text);
             my $newstring = $s . $o . $m . $c . $e;
@@ -373,12 +391,22 @@ Q: for my $query ( $self->_kworder ) {
 
             last if $pos == length $text;
 
-        # need to account for all the new chars we just added with length(...)
-            pos($text) = $pos + length( $o . $c ) - 1;
+            # need to account for all the new chars we just added
+            pos($text) = $pos + $length_we_add;
 
         }
 
+        $self->debug and warn "found $found_matches matches";
+
+        # sanity check similar to Snipper->_re_snip()
+        if ( !$found_matches and $text =~ m/$query/ ) {
+            $self->debug and warn "ERROR: regex failure for '$query'";
+            $text = $self->html($text);
+        }
+
     }
+
+    #warn "plain done";
 
     return $text;
 
@@ -391,38 +419,36 @@ __END__
 
 =head1 NAME
 
-Search::Tools::HiLiter - extract and highlight search results in original text
+Search::Tools::HiLiter - highlight terms in text
 
 =head1 SYNOPSIS
 
- use Search::Tools::HiLiter;
- 
- my $re = Search::Tools::RegExp->new;
- my $rekw = $re->build('the quick brown fox');
- 
- my $hiliter = Search::Tools::HiLiter->new( rekw => $rekw );
+ use Search::Tools::HiLiter; 
+ my $hiliter = Search::Tools::HiLiter->new( 
+    query => 'the quick brown fox' 
+ );
              
- for my $text (@texts)
- {
+ for my $text (@texts) {
     print $hiliter->light( $text );
  }
 
 =head1 DESCRIPTION
 
-Search::Tools::HiLiter uses HTML tags to highlight text just like a felt-tip HiLiter.
-S::T::H can handle both plain and marked up text (HTML and XML). 
-Nested entities and tags within keywords are supported.
+Search::Tools::HiLiter uses HTML tags to highlight text 
+just like a felt-tip HiLiter. The HiLiter can handle both 
+plain (no HTML markup) and marked up text (HTML and XML). 
+Nested entities and tags within terms are supported.
 
-You create
-a HiLiter object with either a string, an array of strings, or a
-Search::Tools::RegExp::Keywords object, and then feed the HiLiter
+You create a HiLiter object with either a string
+or a Search::Tools::Query object, and then feed the HiLiter
 text to highlight. You can control the style and color of the highlight tags.
 
 Some caveats if you are highlighting HTML or XML:
-Unlike its more powerful cousin HTML::HiLiter, S::T::H knows nothing about context.
-This can give unexpected results when your keywords appear in the HTML C<<head>>
-or across block tag boundaries. Use HTML::HiLiter if you need a real HTML parser.
-It uses the same regular expressions as S::T::H but is designed for full HTML
+Unlike its more powerful cousin HTML::HiLiter, Search::Tools::HiLiter
+knows nothing about context. This can give unexpected results 
+when your terms appear in the HTML C<<head>> or across block tag boundaries. 
+Use HTML::HiLiter if you need a real HTML parser.
+It uses the same regular expressions as this class but is designed for full HTML
 documents rather than smaller fragments.
 
 
@@ -430,43 +456,79 @@ documents rather than smaller fragments.
 
 =head2 new( query => I<query> )
 
-I<query> must be either a scalar string, an array reference to a list of scalar strings,
-or a Search::Tools::RegExp::Keywords object. You might use the last if you are also
-using Search::Tools::Snipper, since you only need to compile your S::T::R::Keywords
+I<query> must be either a scalar string or a Search::Tools::Query object. 
+You might use the last if you are also using Search::Tools::Snipper, 
+since you only need to compile your Search::Tools::Query
 object once and then pass it to both new() instances.
 
-The following params are also supported. Each is available as a method as well:
+The following params are also supported. Each is available as an
+accessor method as well:
 
 =over
 
 =item class
 
+=item colors
+
+=item no_html
+
+=item style
+
 =item tag
 
-=item colors
+=item text_color
 
 =item tty
 
 =item ttycolors
 
-=item no_html
-
 =back
 
-=head2 open_tag( I<keyword> )
+=head2 init
 
-=head2 close_tag( I<keyword> )
+Called internally by new().
+
+=head2 terms
+
+Calls through to I<query>->terms(). Returns array ref.
+
+=head2 keywords
+
+Like terms() but returns array not array ref.
+
+=head2 open_tag( I<term> )
+
+Get the opening hilite tag for I<term>.
+
+=head2 close_tag( I<term> )
+
+Get the closing hilite tag for I<term>.
 
 =head2 light( I<text> )
 
+Add hiliting tags to I<text>. Calls plain() or html()
+based on whether I<text> contains markup (checked with
+Search::Tools::XML->looks_like_html()).
+
+=head2 hilite( I<text> )
+
+An alias for light().
+
 =head2 plain( I<text> )
+
+Add hiliting tags to plain I<text>.
 
 =head2 html( I<text> )
 
+Add hiliting tags to marked up I<text>.
 
 =head2 class
 
 The name of the class attribute to be used on the tag().
+
+=head2 style
+
+The value to use in the C<style> attribute of I<tag>.
 
 =head2 tag
 
@@ -474,45 +536,94 @@ The name of the highlighting tag. Default is C<span>.
 
 =head2 tty
 
-Pass a true value to use Term::ANSIColor highlighting. This is useful when using
-a terminal for debugging or for displaying results. Default is off.
+Pass a true value to use Term::ANSIColor highlighting. 
+This is useful when using a terminal for debugging or for displaying results. 
+Default is off.
 
 =head2 ttycolors
 
-Set the colors used if tty() is true. See the Term::ANSIColor documentation for options.
+Set the colors used if tty() is true. 
+See the Term::ANSIColor documentation for options.
 
 =head2 debug
 
-Set to a value >= 1 to get debugging output. If used in conjuction with tty(), both
-tty colors and HTML tags are used for highlighting.
+Set to a value >= 1 to get debugging output. 
+If used in conjuction with tty(), both tty colors and HTML tags 
+are used for highlighting.
 
 =head2 no_html
 
 Set to a true value (1) to avoid HTML highlighting tags regardless of test for whether
 I<text> is HTML.
 
-=head2 keywords
+=head2 colors( I<array_ref_of_html_colors> )
 
-Returns the keywords derived from I<query>.
+Get/set the HTML color values to use inside tag(). These are used if
+class() is not set. The defaults are:
+
+ [ '#ffff99', '#99ffff', '#ffccff', '#ccccff' ]
+
+=head2 text_color( I<html_color> )
+
+Get/set the HTML color to set on the style attribute in tag(). This
+setting can be useful if the background color of the page clashes
+with one or more of the colors() (as with a black body color).
 
 =head1 AUTHOR
 
-Peter Karman C<perl@peknet.com>
+Peter Karman C<< <karman at cpan dot org> >>
 
-Based on the HTML::HiLiter regular expression building code, originally by the same author, 
-copyright 2004 by Cray Inc.
+=head1 ACKNOWLEDGEMENTS
+
+Based on the HTML::HiLiter regular expression building code, 
+originally by the same author, copyright 2004 by Cray Inc.
 
 Thanks to Atomic Learning C<www.atomiclearning.com> 
 for sponsoring the development of this module.
 
+=head1 BUGS
+
+Please report any bugs or feature requests to C<bug-search-tools at rt.cpan.org>, or through
+the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Search-Tools>.  
+I will be notified, and then you'll
+automatically be notified of progress on your bug as I make changes.
+
+=head1 SUPPORT
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc Search::Tools
+
+
+You can also look for information at:
+
+=over 4
+
+=item * RT: CPAN's request tracker
+
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Search-Tools>
+
+=item * AnnoCPAN: Annotated CPAN documentation
+
+L<http://annocpan.org/dist/Search-Tools>
+
+=item * CPAN Ratings
+
+L<http://cpanratings.perl.org/d/Search-Tools>
+
+=item * Search CPAN
+
+L<http://search.cpan.org/dist/Search-Tools/>
+
+=back
+
 =head1 COPYRIGHT
 
-Copyright 2006 by Peter Karman. 
+Copyright 2009 by Peter Karman.
+
 This package is free software; you can redistribute it and/or modify it under the 
 same terms as Perl itself.
 
 =head1 SEE ALSO
 
-HTML::HiLiter, Search::Tools::RegExp::Keywords
-
-=cut
+Search::QueryParser

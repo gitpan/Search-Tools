@@ -1,14 +1,10 @@
-use Test::More tests => 16;
+use Test::More tests => 19;
 use strict;
 use File::Slurp;
 use Data::Dump qw( dump );
 
-BEGIN {
-
-    use_ok('Search::Tools::HiLiter');
-    use_ok('Search::Tools::Snipper');
-
-}
+use_ok('Search::Tools::HiLiter');
+use_ok('Search::Tools::Snipper');
 
 my $text = <<EOF;
 when in the course of human events
@@ -22,10 +18,10 @@ EOF
 
 my @q = ( 'squiggle', 'type', 'course', '"human events"' );
 
-ok( my $re = Search::Tools::RegExp->new(), "RE" );
-ok( my $h = Search::Tools::HiLiter->new( query => $re->build( \@q ) ),
-    "hiliter" );
-ok( my $s = Search::Tools::Snipper->new( query => $h->rekw ), "snipper" );
+ok( my $query = Search::Tools->parser->parse( join( ' ', @q ) ),
+    "new query" );
+ok( my $h = Search::Tools::HiLiter->new( query => $query ), "hiliter" );
+ok( my $s = Search::Tools::Snipper->new( query => $query ), "snipper" );
 
 #diag( dump( $re ) );
 
@@ -41,12 +37,13 @@ ok( my $l = $h->light($snip), "light" );
 
 # and again
 
-$text = read_file('t/test.txt');
+$text = read_file('t/docs/test.txt');
 
 @q = qw(intramuralism maimedly sculpt);
 
-ok( $h = Search::Tools::HiLiter->new( query => \@q ),      "new hiliter" );
-ok( $s = Search::Tools::Snipper->new( query => $h->rekw ), "new snipper" );
+ok( $h = Search::Tools::HiLiter->new( query => join( ' ', @q ) ),
+    "new hiliter" );
+ok( $s = Search::Tools::Snipper->new( query => $h->query ), "new snipper" );
 
 ok( $snip = $s->snip($text), "new snip" );
 
@@ -70,8 +67,23 @@ ok( $h = Search::Tools::HiLiter->new(
     ),
     "nosnip hiliter"
 );
-$text = read_file('t/test.html');
+$text = read_file('t/docs/test.html');
 ok( $l = $h->light($text), "nosnip light" );
+
+# test text_color
+ok( $h = Search::Tools::HiLiter->new(
+        query =>
+            q/o'reilly the quick brown fox* jumped! "jumped over the too lazy"/,
+
+        #tty       => 1,
+        #debug => 1,
+        stopwords  => 'the',
+        text_color => '#fff',
+    ),
+    "nosnip hiliter text_color"
+);
+ok( $l = $h->light($text), "nosnip light text_color" );
+like( $l, qr/color:#fff;/, "text_color used" );
 
 #diag($l);
 
@@ -80,14 +92,13 @@ ok( $l = $h->light($text), "nosnip light" );
 # does not match
 $text = 'AirMail {`} Username]: {`} Password: {`} Remember Name';
 my $q = '"airmail username"';
-ok( my $regex = Search::Tools->regexp(
-        query           => $q,
+ok( $query = Search::Tools->parser(
         word_characters => '\w' . quotemeta("'-.`{}")
-    ),
+        )->parse($q),
     "word_characters"
 );
 
-ok( $h = Search::Tools->hiliter( query => $regex ),
+ok( $h = Search::Tools->hiliter( query => $query ),
     "hiliter for word_characters regex" );
 
 is( $h->light($text), $text, "light word_characters has no match" );

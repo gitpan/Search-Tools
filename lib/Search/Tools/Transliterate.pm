@@ -1,5 +1,4 @@
 package Search::Tools::Transliterate;
-
 use strict;
 use warnings;
 use base qw( Search::Tools::Object );
@@ -12,7 +11,7 @@ __PACKAGE__->mk_accessors(qw( ebit ));
 
 __PACKAGE__->mk_ro_accessors(qw( map ));
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 
 =pod
 
@@ -57,6 +56,10 @@ after new() will have no effect on map().
 
 =back
 
+=head2 init
+
+Called internally by new().
+
 =head2 map
 
 Access the transliteration character map. Example:
@@ -88,14 +91,53 @@ a single space will be used.
 
 =head1 AUTHOR
 
-Peter Karman C<perl@peknet.com>
+Peter Karman C<< <karman@cpan.org> >>
+
+Originally based on the HTML::HiLiter regular expression building code, 
+by the same author, copyright 2004 by Cray Inc.
 
 Thanks to Atomic Learning C<www.atomiclearning.com> 
-for sponsoring the development of this module.
+for sponsoring the development of some of these modules.
+
+=head1 BUGS
+
+Please report any bugs or feature requests to C<bug-search-tools at rt.cpan.org>, or through
+the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Search-Tools>.  
+I will be notified, and then you'll
+automatically be notified of progress on your bug as I make changes.
+
+=head1 SUPPORT
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc Search::Tools
+
+
+You can also look for information at:
+
+=over 4
+
+=item * RT: CPAN's request tracker
+
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Search-Tools>
+
+=item * AnnoCPAN: Annotated CPAN documentation
+
+L<http://annocpan.org/dist/Search-Tools>
+
+=item * CPAN Ratings
+
+L<http://cpanratings.perl.org/d/Search-Tools>
+
+=item * Search CPAN
+
+L<http://search.cpan.org/dist/Search-Tools/>
+
+=back
 
 =head1 COPYRIGHT
 
-Copyright 2006 by Peter Karman.
+Copyright 2006-2009 by Peter Karman.
 
 This package is free software; you can redistribute it and/or modify it under the 
 same terms as Perl itself.
@@ -136,9 +178,9 @@ sub _Utag_to_chr {
     return $t;
 }
 
-sub _init {
+sub init {
     my $self = shift;
-    $self->SUPER::_init(@_);
+    $self->SUPER::init(@_);
 
     $self->{ebit} = 1 unless defined $self->{ebit};
 

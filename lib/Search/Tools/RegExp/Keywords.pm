@@ -8,16 +8,12 @@ __PACKAGE__->mk_ro_accessors(
         kw
         start_bound
         end_bound
-        ),
-    @Search::Tools::Accessors
+        hash
+        array
+        )
 );
 
-our $VERSION = '0.23';
-
-sub _init {
-    my $self = shift;
-    $self->SUPER::_init(@_);
-}
+our $VERSION = '0.24';
 
 sub keywords {
     my $self = shift;
@@ -45,53 +41,34 @@ Search::Tools::RegExp::Keywords - access regular expressions for keywords
 
 =head1 SYNOPSIS
 
- my $regexp = Search::Tools::RegExp->new();
- 
- my $kw = $regexp->build('the quick brown fox');
- 
- for my $w ($kw->keywords)
- {
-    my $r = $kw->re( $w );
- }
-
+ # deprecated. See Search::Tools::Query
  
  
 =head1 DESCRIPTION
 
-Search::Tools::RegExp::Keywords provides access to the regular expressions
-for a query keyword.
-
-A Search::Tools::RegExp::Keywords object is returned by the Search::Tools::RegExp
-build() method. This class is typically not used in isolation.
-
+As of version 0.24 this class is deprecated in favor of Search::Tools::Query.
 
 =head1 METHODS
 
-In addition, a Search::Tools::RegExp::Keywords object inherits from its parent
-Search::Tools::RegExp object the common
-accessors defined in @Search::Tools::Accessors. Since a S::T::R::Keywords object
-doesn't modify anything, you should consider those common accessors as accessors
-only, not mutators.
+=head2 re( I<keyword> )
 
-The following methods are available.
-
-=head2 new
-
-Create an object. Used internally.
-
+Return Keyword object for I<keyword>.
 
 =head2 keywords
 
-Returns array of keywords in same order
-as they appeared in the original query.
-
-=head2 re( I<keyword> )
-
-Returns a Search::Tools::RegExp::Keyword object corresponding to I<keyword>.
+Returns array of keywords.
 
 =head2 kw
 
-Get the original S::T::Keywords object from which the object is derived.
+Get/set the Search::Tools::Keywords (deprecated) object.
+
+=head2 start_bound
+
+=head2 end_bound
+
+=head2 hash
+
+=head2 array
 
 =head1 AUTHOR
 

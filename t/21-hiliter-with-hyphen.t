@@ -1,33 +1,88 @@
 use Search::Tools::HiLiter;
-use Test::More tests => 4;
+use Search::Tools::RegExp;
+use Test::More tests => 10;
 
-{
+my $parser
+    = Search::Tools->parser( word_characters => q/\w/ . quotemeta(q/'./) );
 
-    # package var to control word definition
-    local $Search::Tools::RegExp::WordChar
-        = $Search::Tools::RegExp::UTF8Char . quotemeta("'.");    # no hyphen
+#Data::Dump::dump( $regexp );
 
-    my $hiliter = Search::Tools::HiLiter->new( query => [qw( Kennedy )] );
+my $hiliter
+    = Search::Tools::HiLiter->new( query => $parser->parse(q( Kennedy )) );
 
-    like( $hiliter->light(q{Martha Kennedy Smith}),
-        qr/<span/, 'hiliter works fine without hyphens' );
-    like( $hiliter->light(q{Martha Kennedy-Smith}),
-        qr/<span/, 'hiliter ought to work with hyphens' );
-}
+#Data::Dump::dump($hiliter);
 
-diag($Search::Tools::RegExp::WordChar);
+like( $hiliter->light(q/Martha Kennedy Smith/),
+    qr/<span/, 'hiliter works fine without hyphens' );
+like( $hiliter->light(q/Martha Kennedy-Smith/),
+    qr/<span/, 'hiliter ought to work with hyphens' );
 
-{
+my $kennedy_re = qr/
+(
+\A|(?i-xsm:[\Q'-\E]*)(?si-xm:[\s\x20]|[^\w\Q'\E\.])(?i-xsm:[\Q'-\E]?)
+)
+(
+kennedy
+)
+(
+\Z|(?i-xsm:[\Q'-\E]*)(?si-xm:[\s\x20]|[^\w\Q'\E\.])(?i-xsm:[\Q'-\E]?)
+)
+/xis;
 
-    # the OO way
-    my $regexp = Search::Tools::RegExp->new(
-        word_characters => '\w' . quotemeta("'.") );
+my $re = qr/
+(
+\A|(?i-xsm:[\'\-]*)(?si-xm:[\s\x20]|[^\w\'\.])(?i-xsm:[\'\-]?)
+)
+(
+kennedy
+)
+(
+\Z|(?i-xsm:[\'\-]*)(?si-xm:[\s\x20]|[^\w\'\.])(?i-xsm:[\'\-]?)
+)
+/xis;
 
-    my $hiliter = Search::Tools::HiLiter->new(
-        query => $regexp->build( [qw( Kennedy )] ) );
+my $old_re = qr/
+(
+\A|(?i-xsm:[\'\-]*)(?si-xm:[\s\x20]|[^\w\'\.])(?i-xsm:[\'\-]?)
+)
+(
+kennedy
+)
+(
+\Z|(?i-xsm:[\'\-]*)(?si-xm:[\s\x20]|[^\w\'\.])(?i-xsm:[\'\-]?)
+)
+/xis;
 
-    like( $hiliter->light(q{Martha Kennedy Smith}),
-        qr/<span/, 'hiliter works fine without hyphens' );
-    like( $hiliter->light(q{Martha Kennedy-Smith}),
-        qr/<span/, 'hiliter ought to work with hyphens' );
-}
+like( q/Martha Kennedy Smith/, $kennedy_re, "dumb match no hyphen" );
+like( q/Martha Kennedy-Smith/, $kennedy_re, "dumb match with hyphen" );
+like(
+    q/Martha Kennedy-Smith/,
+    $hiliter->query->regex_for('kennedy')->html,
+    "html match with hyphen"
+);
+like(
+    q/Martha Kennedy-Smith/,
+    $hiliter->query->regex_for('kennedy')->plain,
+    "plain match with hyphen"
+);
+like(
+    q/Martha Kennedy Smith/,
+    $hiliter->query->regex_for('kennedy')->html,
+    "html match with no hyphen"
+);
+like(
+    q/Martha Kennedy Smith/,
+    $hiliter->query->regex_for('kennedy')->plain,
+    "plain match with no hyphen"
+);
+
+is( $kennedy_re,
+    $hiliter->query->regex_for('kennedy')->plain,
+    "plain regex match"
+);
+
+#is( $kennedy_re, $re, "simple re cmp");
+is( $old_re, $re, "before vs after" );
+
+#diag( '-' x 80 );
+#diag($kennedy_re);

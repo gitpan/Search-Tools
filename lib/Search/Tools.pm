@@ -1,37 +1,30 @@
 package Search::Tools;
 use 5.008_003;
 use strict;
-use warnings;
+use warnings::register;
 use Carp;
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 
 use XSLoader;
 XSLoader::load( 'Search::Tools', $VERSION );
 
-# accessors that every object should inherit from its parent
-our @Accessors = qw(
-    stopwords
-    wildcard
-    word_characters
-    ignore_first_char
-    ignore_last_char
-    stemmer
-    phrase_delim
-    ignore_case
-    debug
-    locale
-    charset
-    lang
-
-);
+sub parser {
+    my $class = shift;
+    require Search::Tools::QueryParser;
+    return Search::Tools::QueryParser->new(@_);
+}
 
 sub regexp {
     my $class = shift;
+
+    warnings::warn(
+        "as of version 0.24 you should use parser() instead of regexp()")
+        if warnings::enabled();
+        
     my %extra = @_;
-    my $q     = delete( $extra{query} ) || croak "need query to build regexp";
-    require Search::Tools::RegExp;
-    return Search::Tools::RegExp->new(%extra)->build($q);
+    my $q = delete( $extra{query} ) || croak "query required";
+    return $class->parser(%extra)->parse($q);
 }
 
 sub hiliter {
@@ -66,36 +59,31 @@ __END__
 
 =head1 NAME
 
-Search::Tools - tools for building search applications
+Search::Tools - high-performance tools for building search applications
 
 =head1 SYNOPSIS
 
  use Search::Tools;
  
- my $query = 'the quik brown fox';
- 
- my $re = Search::Tools->regexp(query => $query);
- 
- my $snipper    = Search::Tools->snipper(query => $re);
- my $hiliter    = Search::Tools->hiliter(query => $re);
- my $spellcheck = Search::Tools->spellcheck(query => $re);
+ my $string     = 'the quik brown fox';
+ my $qparser    = Search::Tools->parser();
+ my $query      = $qparser->parse($string);
+ my $snipper    = Search::Tools->snipper(query => $query);
+ my $hiliter    = Search::Tools->hiliter(query => $query);
+ my $spellcheck = Search::Tools->spellcheck(query_parser => $qparser);
 
- my $suggestions = $spellcheck->suggest($query);
+ my $suggestions = $spellcheck->suggest($string);
  
- for my $s (@$suggestions)
- {
-    if (! $s->{suggestions})
-    {
+ for my $s (@$suggestions) {
+    if (! $s->{suggestions}) {
         # $s->{word} was spelled correctly
     }
-    elsif (@{ $s->{suggestions} })
-    {
-        print "Did you mean: " . join(' or ', @{$s->{suggestions}}) . "\n";
+    elsif (@{ $s->{suggestions} }) {
+        printf "Did you mean: %s\n", join(' or ', @{$s->{suggestions}}));
     }
  }
 
- for my $result (@search_results)
- {
+ for my $result (@search_results) {
     print $hiliter->light( $snipper->snip( $result->summary ) );
  }
   
@@ -103,8 +91,8 @@ Search::Tools - tools for building search applications
 =head1 DESCRIPTION
 
 Search::Tools is a set of utilities for building search applications.
-Rather than adhering to a particular search application, the goal
-of Search::Tools is to provide general-purpose methods for common
+Rather than adhering to a particular search application or framework,
+the goal of Search::Tools is to provide general-purpose methods for common
 search application features. Think of Search::Tools like a toolbox
 rather than a hammer.
 
@@ -114,24 +102,24 @@ Examples include:
 
 =item
 
-Parsing search queries for the meaningful keywords
+Parsing search queries for the meaningful terms
 
 =item
 
-Rich regular expressions for locating keywords in the original
+Rich regular expressions for locating terms in the original
 indexed documents
 
 =item
 
-Contextual snippets showing query keywords
+Contextual snippets showing query terms
 
 =item
 
-Highlighting of keywords in context
+Highlighting of terms in context
 
 =item
 
-Spell check keywords and suggestions of alternate spellings.
+Spell check terms and suggestions of alternate spellings.
 
 =back
 
@@ -139,86 +127,165 @@ Search::Tools is derived from some of the features in HTML::HiLiter
 and SWISH::HiLiter, but has been re-written with an eye to accomodating
 more general purpose features.
 
+=head1 METHODS
+
+=head2 parser( I<args> )
+
+Returns a Search::Tools::Parser object, passing I<args> to new().
+
+=head2 regexp
+
+Deprecated. Use parser() instead.
+
+=head2 hiliter( I<args> )
+
+Returns a Search::Tools::HiLiter object, passing I<args> to new().
+
+=head2 snipper( I<args> )
+
+Returns a Search::Tools::Snipper object, passing I<args> to new().
+
+=head2 transliterate( I<str> )
+
+Same as:
+
+ Search::Tools::Transliterate->new()->convert( $str )
+
+=head2 spellcheck( I<args> )
+
+Returns a Search::Tools::SpellCheck object, passing I<args> to new().
+
+=cut
+
+=head1 FUNCTIONS
+
+=head2 describe( I<object> )
+
+XS debugging help. Same as using Devel::Peek.
+
 =head1 REQUIREMENTS
 
-Perl 5.8 or later is required. This is for full UTF-8 support.
+Perl 5.8.3 or later is required. This is for full UTF-8 support.
 
 The following CPAN modules are required:
 
 =over
 
-=item Class::Accessor::Fast
+=item Rose::Object
 
 =item Search::QueryParser
 
+=item Data::Dump
+
+=item File::Slurp
+
+=item Encode
+
+=item Carp
+
+=back
+
+The following CPAN modules are recommended for the full set of features
+and for performance.
+
+=over
+
 =item Text::Aspell
+
+=item Class::XSAccessor
 
 =back
 
 See also the specific module documentation for individual requirements.
 
+=head1 HISTORY
 
-=head1 METHODS
+The public API has changed as of version 0.24. The following classes
+are now deprecated:
 
-=head2 transliterate( I<text> )
+ Search::Tools::Keywords
+ Search::Tools::RegExp
+ Search::Tools::RegExp::Keywords
+ Search::Tools::RegExp::Keyword
 
-See Search::Tools::Transliterate convert().
+The following Search::Tools method is deprecated:
 
-The following convenience methods are simple class methods around the 
-indicated module. Each of them requires a C<query> key/value pair
-parameter.
+ regexp()
 
-=head2 regexp
+The following classes are new as of version 0.24:
 
-=head2 snipper
-
-=head2 hiliter
-
-=head2 spellcheck
-
-=head1 COMMON ACCESSORS
-
-The following common accessors are inherited by every module in Search::Tools:
-
-    stopwords
-    wildcard
-    word_characters
-    ignore_first_char
-    ignore_last_char
-    stemmer
-    phrase_delim
-    ignore_case
-    debug
-    locale
-    charset
-    lang
-
-See each module's documentation for more details.
+ Search::Tools::HeatMap
+ Search::Tools::Query
+ Search::Tools::QueryParser
+ Search::Tools::RegEx
+ Search::Tools::Token
+ Search::Tools::TokenList
+ Search::Tools::TokenListPP
+ Search::Tools::TokenListUtils
+ Search::Tools::TokenPP
+ Search::Tools::Tokenizer
 
 =head1 EXAMPLES
 
-See the tests in t/ for examples.
+See the tests in t/ and the example scripts in example/.
  
 =head1 AUTHOR
 
-Peter Karman C<perl@peknet.com>
+Peter Karman C<< <karman@cpan.org> >>
 
-Based on the HTML::HiLiter regular expression building code, originally by the same author, 
-copyright 2004 by Cray Inc.
+=head1 ACKNOWLEDGMENTS
+
+The original idea and regular expression builder comes from
+HTML::HiLiter by the same author, copyright 2004 by Cray Inc.
 
 Thanks to Atomic Learning C<www.atomiclearning.com> 
-for sponsoring the development of these modules.
+for sponsoring the development of some of these modules.
+
+=head1 BUGS
+
+Please report any bugs or feature requests to C<bug-search-tools at rt.cpan.org>, or through
+the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Search-Tools>.  
+I will be notified, and then you'll
+automatically be notified of progress on your bug as I make changes.
+
+=head1 SUPPORT
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc Search::Tools
+
+
+You can also look for information at:
+
+=over 4
+
+=item * RT: CPAN's request tracker
+
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Search-Tools>
+
+=item * AnnoCPAN: Annotated CPAN documentation
+
+L<http://annocpan.org/dist/Search-Tools>
+
+=item * CPAN Ratings
+
+L<http://cpanratings.perl.org/d/Search-Tools>
+
+=item * Search CPAN
+
+L<http://search.cpan.org/dist/Search-Tools/>
+
+=back
 
 =head1 COPYRIGHT
 
-Copyright 2006 by Peter Karman. 
+Copyright 2006-2009 by Peter Karman.
+
 This package is free software; you can redistribute it and/or modify it under the 
 same terms as Perl itself.
 
 =head1 SEE ALSO
 
-HTML::HiLiter, SWISH::HiLiter, Search::Tools::Keywords,  Search::Tools::RegExp,
-Search::Tools::RegExp::Keywords, Search::Tools::RegExp::Keyword, Search::Tools::Snipper,
-Search::Tools::HiLiter, Search::Tools::SpellCheck
+HTML::HiLiter, SWISH::HiLiter, Rose::Object, Class::XSAccessor, Text::Aspell
 
 =cut

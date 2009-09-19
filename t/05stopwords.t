@@ -1,59 +1,52 @@
+use strict;
 use Test::More tests => 13;
 
-BEGIN { use_ok('Search::Tools::RegExp') }
+use_ok('Search::Tools');
+
+# http://code.google.com/p/test-more/issues/detail?id=46
+binmode Test::More->builder->output,         ":utf8";
+binmode Test::More->builder->failure_output, ":utf8";
 
 my %q = (
     'the quick'             => 'quick',        # stopwords
     '"the quick brown fox"' => 'quick fox',    # phrase stopwords
 
-        );
+);
 
-ok(
-    my $re =
-      Search::Tools::RegExp->new(
-                                 lang    => 'en_us',
-                                 stopwords => 'the brown'
-                                ),
+ok( my $qparser = Search::Tools->parser(
+        lang      => 'en_us',
+        stopwords => 'the brown'
+    ),
 
-    "re object"
-  );
+    "new parser"
+);
 
-ok(my $kw = $re->build([keys %q]), "build re");
+test_parser($qparser);
 
-for my $w ($kw->keywords)
-{
-    my $r     = $kw->re($w);
-    my $plain = $r->plain;
-    my $html  = $r->html;
+ok( $qparser = Search::Tools->parser(
+        lang      => 'en_us',
+        stopwords => [qw(the brown)]
+    ),
 
-    like($w, qr{^$plain$}, $w);
-    like($w, qr{^$html$},  $w);
+    "new parser"
+);
 
-    #diag($plain);
+test_parser($qparser);
 
-}
+sub test_parser {
 
-ok(
-    $re =
-      Search::Tools::RegExp->new(
-                                 lang    => 'en_us',
-                                 stopwords => [qw(the brown)]
-                                ),
+    ok( my $query = $qparser->parse( join( ' ', keys %q ) ), "parse query" );
 
-    "re object"
-  );
+    for my $term ( @{ $query->terms } ) {
+        my $r     = $query->regex_for($term);
+        my $plain = $r->plain;
+        my $html  = $r->html;
 
-ok($kw = $re->build([keys %q]), "build re");
+        like( $term, qr{^$plain$}, $term );
+        like( $term, qr{^$html$},  $term );
 
-for my $w ($kw->keywords)
-{
-    my $r     = $kw->re($w);
-    my $plain = $r->plain;
-    my $html  = $r->html;
+        #diag($plain);
 
-    like($w, qr{^$plain$}, $w);
-    like($w, qr{^$html$},  $w);
-
-    #diag($plain);
+    }
 
 }
