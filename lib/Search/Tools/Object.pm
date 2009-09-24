@@ -6,7 +6,7 @@ use base qw( Rose::Object );
 use Scalar::Util qw( blessed );
 use Search::Tools::MethodMaker;
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 __PACKAGE__->mk_accessors(qw( debug ));
 
@@ -122,12 +122,18 @@ sub _normalize_args {
         croak "query required";
     }
     if ( !ref($q) ) {
-        $args{query} = Search::Tools::QueryParser->new(%args)->parse($q);
+        require Search::Tools::QueryParser;
+        $args{query} = Search::Tools::QueryParser->new(
+            map { $_ => delete $args{$_} }
+                grep { Search::Tools::QueryParser->can($_) } keys %args
+        )->parse($q);
     }
     elsif ( ref($q) eq 'ARRAY' ) {
         warn "query ARRAY ref deprecated as of version 0.24";
-        $args{query} = Search::Tools::QueryParser->new(%args)
-            ->parse( join( ' ', @$q ) );
+        $args{query} = Search::Tools::QueryParser->new(
+            map { $_ => delete $args{$_} }
+                grep { Search::Tools::QueryParser->can($_) } keys %args
+        )->parse( join( ' ', @$q ) );
     }
     elsif ( blessed($q) and $q->isa('Search::Tools::Query') ) {
         $args{query} = $q;

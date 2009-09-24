@@ -4,8 +4,9 @@ use warnings;
 use base qw( Search::Tools::Object );
 use Carp;
 use Search::Tools::XML;
+use Search::Tools::UTF8;
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 my $XML = Search::Tools::XML->new;
 
@@ -68,8 +69,8 @@ sub _kworder {
     my $self = shift;
 
     # do phrases first so that duplicates privilege phrases
-    $self->{_kworder} ||= [ $self->_phrases, $self->_singles ];
-    return @{ $self->{_kworder} };
+
+    return ( $self->_phrases, $self->_singles );
 }
 
 sub _build_tags {
@@ -143,6 +144,9 @@ sub close_tag {
 sub light {
     my $self = shift;
     my $text = shift or return '';
+    
+    # force upgrade. this is so regex will match ok.
+    $text = to_utf8($text);
 
     if ( $XML->looks_like_html($text) && !$self->no_html ) {
 
@@ -202,10 +206,16 @@ sub html {
 
     # if the query text matched in the text, then we need to
     # use our prebuilt regexp
+    my @kworder = $self->_kworder;
 
-Q: for my $query ( $self->_kworder ) {
+    # don't consider anything we've marked
+    # with a 'nohiliter' attribute
+    my $text_copy = $text;
+    $text_copy =~ s/\002.*?\003//sgi;
+
+Q: for my $query (@kworder) {
         my $re = $self->query->regex_for($query)->html;
-        my $real = $self->_get_real_html( \$text, $re );
+        my $real = $self->_get_real_html( \$text_copy, $re );
 
     R: for my $r ( keys %$real ) {
             push( @{ $q2real->{$query} }, $r ) while $real->{$r}--;
@@ -214,7 +224,7 @@ Q: for my $query ( $self->_kworder ) {
 
     ## 2
 
-HILITE: for my $q ( $self->_kworder ) {
+HILITE: for my $q (@kworder) {
 
         my %uniq_reals = ();
         $uniq_reals{$_}++ for @{ $q2real->{$q} };
@@ -268,8 +278,6 @@ sub _add_hilite_tags {
         my $m = $2;
         my $e = $3;
         if ( $self->debug > 1 ) {
-
-            #print "$OC add_hilite_tags:\n$st_bound\n$safe\n$end_bound\n $CC";
             carp "matched:\n'$s'\n'$m'\n'$e'\n"
                 . "\$1 is "
                 . ord($s)
@@ -366,7 +374,7 @@ Q: for my $query ( $self->_kworder ) {
         # in repeated match on nonwordchar: > (since we just added a tag)
 
         if ( $self->debug ) {
-            if ( $text =~ m/$query/i && $text !~ m/$re/ ) {
+            if ( $text =~ m/\Q$query\E/i && $text !~ m/$re/ ) {
                 croak "bad regex for '$query': $re";
             }
         }
@@ -399,7 +407,7 @@ Q: for my $query ( $self->_kworder ) {
         $self->debug and warn "found $found_matches matches";
 
         # sanity check similar to Snipper->_re_snip()
-        if ( !$found_matches and $text =~ m/$query/ ) {
+        if ( !$found_matches and $text =~ m/\Q$query\E/ ) {
             $self->debug and warn "ERROR: regex failure for '$query'";
             $text = $self->html($text);
         }
@@ -509,6 +517,8 @@ Get the closing hilite tag for I<term>.
 Add hiliting tags to I<text>. Calls plain() or html()
 based on whether I<text> contains markup (checked with
 Search::Tools::XML->looks_like_html()).
+
+light() will return I<text> as a UTF-8 encoded string.
 
 =head2 hilite( I<text> )
 

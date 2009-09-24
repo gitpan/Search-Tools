@@ -7,7 +7,7 @@ use Search::Tools::Keywords;
 use Search::Tools::RegExp::Keywords;
 use Search::Tools::RegExp::Keyword;
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 __PACKAGE__->mk_accessors(qw( kw ));
 
@@ -73,7 +73,7 @@ __END__
 
 =head1 NAME
 
-Search::Tools::RegExp - build regular expressions from search queries
+Search::Tools::RegExp - (**DEPRECATED**) build regular expressions from search queries
 
 =head1 SYNOPSIS
 

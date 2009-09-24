@@ -4,7 +4,7 @@ use warnings;
 use Carp;
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 __PACKAGE__->mk_ro_accessors(qw( plain html word phrase ));
 
@@ -15,7 +15,7 @@ __END__
 
 =head1 NAME
 
-Search::Tools::RegExp::Keyword - access regular expressions for a keyword
+Search::Tools::RegExp::Keyword - (**DEPRECATED**) access regular expressions for a keyword
 
 =head1 SYNOPSIS
 

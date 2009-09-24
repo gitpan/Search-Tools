@@ -13,7 +13,7 @@ __PACKAGE__->mk_ro_accessors(
         )
 );
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 sub keywords {
     my $self = shift;
@@ -37,7 +37,7 @@ __END__
 
 =head1 NAME
 
-Search::Tools::RegExp::Keywords - access regular expressions for keywords
+Search::Tools::RegExp::Keywords - (**DEPRECATED**) access regular expressions for keywords
 
 =head1 SYNOPSIS
 

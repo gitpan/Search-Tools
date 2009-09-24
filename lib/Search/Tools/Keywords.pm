@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use base qw( Search::Tools::QueryParser );
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 # this is backcompat class only.
 
@@ -24,7 +24,7 @@ __END__
 
 =head1 NAME
 
-Search::Tools::Keywords - extract keywords from a search query
+Search::Tools::Keywords - (**DEPRECATED**) extract keywords from a search query
 
 =head1 SYNOPSIS
 
