@@ -613,3 +613,20 @@ DESTROY(self)
             st_free_token(tok);
         }
     
+
+############################################################################
+
+MODULE = Search::Tools       PACKAGE = Search::Tools::XML
+
+PROTOTYPES: enable
+
+SV*
+_escape_xml(text)
+    char *text;
+
+    CODE:
+        RETVAL = st_escape_xml(text);
+    
+    OUTPUT:
+        RETVAL
+ 

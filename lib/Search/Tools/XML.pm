@@ -3,8 +3,9 @@ use strict;
 use warnings;
 use Carp;
 use base qw( Search::Tools::Object );
+use Search::Tools;    # XS required
 
-our $VERSION = '0.26';
+our $VERSION = '0.27';
 
 =pod
 
@@ -55,31 +56,12 @@ B<NOTE:> To get full UTF-8 character set from chr() you must be using Perl >= 5.
 This affects things like the unescape* methods.
 
 =head1 VARIABLES
-
-=head2 %Ents
-
-Basic HTML/XML characters that must be escaped:
-
- '>' => '&gt;',
- '<' => '&lt;',
- '&' => '&amp;',
- '"' => '&quot;',
- "'" => '&apos;'
  
 =head2 %HTML_ents
 
 Complete map of all named HTML entities to their decimal values.
 
 =cut
-
-our %Ents = (
-    '>' => '&gt;',
-    '<' => '&lt;',
-    '&' => '&amp;',
-    '"' => '&quot;',
-    "'" => '&apos;'
-);
-my $ToEscape = join( '', keys %Ents );
 
 # regexp for what constitutes whitespace in an HTML doc
 # it's not as simple as \s|&nbsp; so we define it separately
@@ -432,8 +414,8 @@ chars using tag_safe().
 
 =cut
 
-sub start_tag { "<" . $_[0]->tag_safe( $_[1] ) . ">" }
-sub end_tag   { "</" . $_[0]->tag_safe( $_[1] ) . ">" }
+sub start_tag { "<" . tag_safe( $_[1] ) . ">" }
+sub end_tag   { "</" . tag_safe( $_[1] ) . ">" }
 
 =pod
 
@@ -449,8 +431,7 @@ Example:
 =cut
 
 sub tag_safe {
-    my $class = shift;
-    my $t     = shift;
+    my $t = pop;
 
     return '_' unless length $t;
 
@@ -470,11 +451,16 @@ non-ASCII chars converted to numeric entities.
 This is escape() on steroids. B<Do not use them both on the same text>
 unless you know what you're doing. See the SYNOPSIS for an example.
 
+=head2 escape_utf8
+
+Alias for utf8_safe().
+
 =cut
 
+*escape_utf8 = \&utf8_safe;
+
 sub utf8_safe {
-    my $class = shift;
-    my $t     = shift;
+    my $t = pop;
     $t = '' unless defined $t;
 
     # converts all low chars except \t \n and \r
@@ -521,22 +507,23 @@ An alias for no_html().
 
 =head2 escape( I<text> )
 
-Similar to escape() functions in more famous CPAN modules, but without the added
-dependency. escape() will convert the special XML chars (><'"&) to their
-entity equivalents. See %Ents.
+Similar to escape() functions in more famous CPAN modules, but without the 
+added dependency. escape() will convert the special XML chars (><'"&) to their
+named entity equivalents.
 
 The escaped I<text> is returned.
 
-B<IMPORTANT:> The API for this method has changed as of version 0.16. I<text> is no longer
-modified in-place.
+B<IMPORTANT:> The API for this method has changed as of version 0.16. I<text> 
+is no longer modified in-place.
+
+As of version 0.27 escape() is written in C/XS for speed.
 
 =cut
 
 sub escape {
-    my ( $self, $text ) = @_;
+    my $text = pop;
     return unless defined $text;
-    $text =~ s/([$ToEscape])/$Ents{$1}/og;
-    return $text;
+    return _escape_xml($text);
 }
 
 =head2 unescape( I<text> )
@@ -553,9 +540,9 @@ I<text> is no longer modified in-place.
 =cut
 
 sub unescape {
-    my ( $self, $text ) = @_;
-    $text = $self->unescape_named($text);
-    $text = $self->unescape_decimal($text);
+    my $text = pop;
+    $text = unescape_named($text);
+    $text = unescape_decimal($text);
     return $text;
 }
 
