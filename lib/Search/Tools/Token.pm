@@ -9,11 +9,7 @@ use overload
 
 use Search::Tools;    # XS required
 
-our $VERSION = '0.28';
-
-sub is_end_of_sentence {
-    return $_[0] =~ m/[\.\?\!\;\:]\ /;
-}
+our $VERSION = '0.29';
 
 1;
 
@@ -77,7 +73,12 @@ Did the token match the re() in the Tokenizer.
 
 Did the token match the heat_seeker in the Tokenizer.
 
-=head2 is_end_of_sentence
+=head2 is_sentence_start
+
+Returns true value if the Token starts with an UPPER case
+UTF8 character or other common sentence-starting character.
+
+=head2 is_sentence_end
 
 Returns true value if the Token matches common sentence-ending
 punctuation.

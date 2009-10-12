@@ -5,20 +5,18 @@ use Carp;
 use Data::Dump qw( dump );
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 
 # debuggin only
 my $OPEN  = '[';
 my $CLOSE = ']';
-eval {
-    require Term::ANSIColor;
-};
+eval { require Term::ANSIColor; };
 if ( !$@ ) {
     $OPEN .= Term::ANSIColor::color('bold red');
     $CLOSE = Term::ANSIColor::color('reset') . $CLOSE;
 }
 
-__PACKAGE__->mk_accessors(qw( window_size tokens spans ));
+__PACKAGE__->mk_accessors(qw( window_size tokens spans as_sentences ));
 
 =head1 NAME
 
@@ -31,8 +29,9 @@ Search::Tools::HeatMap - locate the best matches in a snippet extract
      
  my $tokens = $self->tokenizer->tokenize( $my_string, qr/^(interesting)$/ );
  my $heatmap = Search::Tools::HeatMap->new(
-     tokens      => $tokens,
-     window_size => 20,
+     tokens         => $tokens,
+     window_size    => 20,  # default
+     as_sentences   => 0,   # default
  );
 
  if ( $heatmap->has_spans ) {
@@ -88,6 +87,12 @@ matches.
 Set this in new(). Access it later if you need to, but the spans
 will have already been created by new().
 
+=head2 as_sentences
+
+Try to match clusters at sentence boundaries. Default is false.
+
+Set this in new().
+
 =head2 spans
 
 Returns an array ref of matching clusters. Each span in the array
@@ -105,6 +110,8 @@ is a hash ref with the following keys:
 
 =item str_w_pos
 
+This item is available only if debug() is true.
+
 =item unique
 
 =back
@@ -114,10 +121,148 @@ is a hash ref with the following keys:
 # TODO this is mostly integer math and might be much
 # faster if rewritten in XS once the algorithm is "final".
 sub _build {
-    my $self       = shift;
-    my $tokens     = $self->tokens or croak "tokens required";
-    my $window     = $self->window_size || 20;
+    my $self         = shift;
+    my $tokens       = $self->tokens or croak "tokens required";
+    my $window       = $self->window_size || 20;
+    my $as_sentences = $self->as_sentences || 0;
+    return $as_sentences
+        ? $self->_as_sentences( $tokens, $window )
+        : $self->_no_sentences( $tokens, $window );
+}
+
+# currently _as_sentences() is mostly identical to _no_sentences()
+# with slightly fewer gymnastics.
+# Since we already know via sentence_starts where our boundaries are,
+# we not have to call $tokens->get_window().
+# Who knows how we might improve the sentence algorithm in future,
+# so already having it in its own method seems like a win.
+sub _as_sentences {
+    my ( $self, $tokens, $window ) = @_;
+    my $debug = $self->debug || 0;
+    my $sentence_length = $window * 2;
+
+    # build heatmap with sentence starts
+    my $num_tokens      = $tokens->len;
+    my $tokens_arr      = $tokens->as_array;
+    my %heatmap         = ();
+    my $token_list_heat = $tokens->get_heat;
+    my $sentence_starts = $tokens->get_sentence_starts;
+    my @starts_ends;
+    my $i = 0;
+    for (@$token_list_heat) {
+        my $token     = $tokens->get_token($_);
+        my $token_pos = $token->pos;
+        my $start     = $sentence_starts->[ $i++ ];
+        $heatmap{$token_pos} = $token->is_hot;
+        my $end = $start;
+        while ( $end <= ( $start + $sentence_length ) ) {
+            my $tok = $tokens->get_token( $end++ );
+            if ( $tok->is_sentence_end ) {
+                last;
+            }
+        }
+
+        # if we didn't yet set the actual hot token,
+        # include everything up to it.
+        if ( $end < $token_pos ) {
+            $end = $token_pos;
+        }
+        push( @starts_ends, [ $start, $token_pos, $end ] );
+    }
+
+    my @spans;
+    my %seen_pos;
+START_END:
+    for my $start_end (@starts_ends) {
+
+        # get full window, ignoring positions we've already seen.
+        my $heat = 0;
+        my %span;
+        my @cluster_tokens;
+
+        my ( $start, $hot_pos, $end ) = @$start_end;
+    POS: for my $pos ( $start .. $end ) {
+            next if $seen_pos{$pos}++;
+            $heat += ( exists $heatmap{$pos} ? $heatmap{$pos} : 0 );
+            push( @cluster_tokens, $tokens->get_token($pos) );
+        }
+
+        # if we had already seen_pos all positions.
+        next unless @cluster_tokens;
+
+        # sanity: make sure we still have something hot
+        my $has_hot = 0;
+        my @cluster_pos;
+        my @strings;
+        for (@cluster_tokens) {
+            my $pos = $_->pos;
+            $has_hot++ if exists $heatmap{$pos};
+            push @strings,     $_->str;
+            push @cluster_pos, $pos;
+        }
+        next unless $has_hot;
+
+        $span{start_end} = $start_end;
+        $span{heat}      = $heat;
+        $span{pos}       = \@cluster_pos;
+        $span{tokens}    = \@cluster_tokens;
+        $span{str}       = join( '', @strings );
+
+        # just for debug
+        if ($debug) {
+            my $i = 0;
+            $span{str_w_pos} = join(
+                '',
+                map {
+                          $strings[ $i++ ]
+                        . ( exists $heatmap{$_} ? $OPEN : '[' )
+                        . $_
+                        . ( exists $heatmap{$_} ? $CLOSE : ']' )
+                    } @cluster_pos
+            );
+        }
+
+        # spans with more *unique* hot tokens in a single span rank higher
+        my %uniq = ();
+        my $i    = 0;
+        for (@cluster_pos) {
+            if ( exists $heatmap{$_} ) {
+                $uniq{ $strings[$i] } += $heatmap{$_};
+            }
+            $i++;
+        }
+        $span{unique} = scalar keys %uniq;
+
+        push @spans, \%span;
+
+    }
+
+    $self->{spans}   = $self->_sort_spans( \@spans );
+    $self->{heatmap} = \%heatmap;
+
+    return $self;
+}
+
+sub _sort_spans {
+    return [
+
+        # sort by unique,
+        # then by heat
+        # then by pos
+
+        sort {
+                   $b->{unique} <=> $a->{unique}
+                || $b->{heat} <=> $a->{heat}
+                || $a->{pos}->[0] <=> $b->{pos}->[0]
+            } @{ $_[1] }
+
+    ];
+}
+
+sub _no_sentences {
+    my ( $self, $tokens, $window ) = @_;
     my $lhs_window = int( $window / 2 );
+    my $debug = $self->debug || 0;
 
     # build heatmap
     my $num_tokens      = $tokens->len;
@@ -130,16 +275,24 @@ sub _build {
     }
 
     # make clusters
-    my $match_distance = int( $num_tokens / $tokens->num_matches );
-    my @positions      = sort { $a <=> $b } keys %heatmap;
-    my @clusters       = ( [] );
-    my $i              = 0;
+
+    # $proximity == (1/4 of $window)+1 is somewhat arbitrary,
+    # but since we want to err in having too much context,
+    # we aim high. Worst case scenario is where there are
+    # multiple hot spots in a cluster and each is a full
+    # $proximity length apart, which will grow the
+    # eventual span far beyond $window size. We rely
+    # on max_chars in Snipper to catch that worst case.
+    my $proximity = int( $lhs_window / 2 ) + 1;
+    my @positions = sort { $a <=> $b } keys %heatmap;
+    my @clusters  = ( [] );
+    my $i         = 0;
     for my $pos (@positions) {
 
         # if we have advanced past the first position
-        # and the previous position is not adjacent to this one,
+        # and the previous position is not "close" to this one,
         # start a new cluster
-        if ( $i && $positions[ $i - 1 ] != ( $pos - $match_distance ) ) {
+        if ( $i && ( $pos - $positions[ $i - 1 ] ) > $proximity ) {
             push( @clusters, [$pos] );
         }
         else {
@@ -148,14 +301,14 @@ sub _build {
         $i++;
     }
 
-    #warn "match_distance: $match_distance   clusters: " . dump \@clusters;
+    $debug and warn "proximity: $proximity   clusters: " . dump \@clusters;
 
     # create spans from each cluster, each with a weight.
-    # sort by cluster length, so we get highest density first,
-    # followed by heatmap value,
-    # followed by lowest position (first in tokenlist).
+    # we do the initial sort so that clusters that overlap
+    # other clusters via get_window() are weeded out via %seen_pos.
     my @spans;
     my %seen_pos;
+CLUSTER:
     for my $cluster (
         sort {
                    scalar(@$b) <=> scalar(@$a)
@@ -169,11 +322,11 @@ sub _build {
         my $heat = 0;
         my %span;
         my @cluster_tokens;
-        for my $pos (@$cluster) {
-            $heat += $heatmap{$pos};
+    POS: for my $pos (@$cluster) {
             my ( $start, $end ) = $tokens->get_window( $pos, $window );
-            for my $pos2 ( $start .. $end ) {
+        POS_TWO: for my $pos2 ( $start .. $end ) {
                 next if $seen_pos{$pos2}++;
+                $heat += ( exists $heatmap{$pos2} ? $heatmap{$pos2} : 0 );
                 push( @cluster_tokens, $tokens->get_token($pos2) );
             }
         }
@@ -208,20 +361,22 @@ sub _build {
         $span{str}     = join( '', @strings );
 
         # just for debug
-        my $i = 0;
-        $span{str_w_pos} = join(
-            '',
-            map {
-                      $strings[ $i++ ]
-                    . ( exists $heatmap{$_} ? $OPEN : '[' )
-                    . $_
-                    . ( exists $heatmap{$_} ? $CLOSE : ']' )
-                } @cluster_pos
-        );
+        if ($debug) {
+            my $i = 0;
+            $span{str_w_pos} = join(
+                '',
+                map {
+                          $strings[ $i++ ]
+                        . ( exists $heatmap{$_} ? $OPEN : '[' )
+                        . $_
+                        . ( exists $heatmap{$_} ? $CLOSE : ']' )
+                    } @cluster_pos
+            );
+        }
 
         # spans with more *unique* hot tokens in a single span rank higher
         my %uniq = ();
-        $i = 0;
+        my $i    = 0;
         for (@cluster_pos) {
             if ( exists $heatmap{$_} ) {
                 $uniq{ $strings[$i] } += $heatmap{$_};
@@ -234,7 +389,7 @@ sub _build {
 
     }
 
-    $self->{spans}   = \@spans;
+    $self->{spans}   = $self->_sort_spans( \@spans );
     $self->{heatmap} = \%heatmap;
 
     return $self;

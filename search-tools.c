@@ -7,7 +7,8 @@
 /*
  * Search::Tools C helpers
  */
-
+ 
+#include <wctype.h>
 #include "search-tools.h"
 
 /* global debug var */
@@ -143,11 +144,11 @@ st_malloc(size_t size) {
 
 static st_token*    
 st_new_token(
-    IV pos, 
-    IV len,
-    IV u8len,
+    I32 pos, 
+    I32 len,
+    I32 u8len,
     const char *ptr,
-    IV is_hot,
+    I32 is_hot,
     boolean is_match
 ) {
     dTHX;
@@ -163,6 +164,8 @@ st_new_token(
     tok->u8len = u8len;
     tok->is_hot = is_hot;
     tok->is_match = is_match;
+    tok->is_sentence_start = 0;
+    tok->is_sentence_end = 0;
     tok->str = newSVpvn(ptr, len); /* newSVpvn_utf8 not available in some perls? */
     SvUTF8_on(tok->str);
     tok->ref_cnt = 1;
@@ -173,6 +176,7 @@ static st_token_list*
 st_new_token_list(
     AV *tokens,
     AV *heat,
+    AV *sentence_starts,
     unsigned int num
 ) {
     dTHX;
@@ -181,6 +185,7 @@ st_new_token_list(
     tl->pos = 0;
     tl->tokens = tokens;
     tl->heat   = heat;
+    tl->sentence_starts = sentence_starts;
     tl->num = (IV)num;
     tl->ref_cnt = 1;
     return tl;
@@ -206,8 +211,8 @@ st_free_token_list(st_token_list *token_list) {
     }
     SvREFCNT_dec(token_list->tokens);
     if (SvREFCNT(token_list->tokens)) {
-        warn("Warning: possible memory leak for token_list 0x%x with REFCNT %d\n", 
-            token_list->tokens, SvREFCNT(token_list->tokens));
+        warn("Warning: possible memory leak for token_list 0x%lx with REFCNT %d\n", 
+            (unsigned long)token_list->tokens, SvREFCNT(token_list->tokens));
     }
     free(token_list);
 }
@@ -218,11 +223,11 @@ st_dump_token_list(st_token_list *tl) {
     IV len, pos;
     len = av_len(tl->tokens);
     pos = 0;
-    warn("TokenList 0x%x", tl);
-    warn(" pos = %d\n", tl->pos);
-    warn(" len = %d\n", len + 1);
-    warn(" num = %d\n", tl->num);
-    warn(" ref_cnt = %d\n", tl->ref_cnt);
+    warn("TokenList 0x%lx", (unsigned long)tl);
+    warn(" pos = %ld\n", (unsigned long)tl->pos);
+    warn(" len = %ld\n", (unsigned long)len + 1);
+    warn(" num = %ld\n", (unsigned long)tl->num);
+    warn(" ref_cnt = %ld\n", (unsigned long)tl->ref_cnt);
     while (pos < len) {
         st_dump_token((st_token*)st_extract_ptr(st_av_fetch(tl->tokens, pos++)));
     }
@@ -231,14 +236,16 @@ st_dump_token_list(st_token_list *tl) {
 static void
 st_dump_token(st_token *tok) {
     dTHX;
-    warn("Token 0x%x", tok);
+    warn("Token 0x%lx", (unsigned long)tok);
     warn(" str = '%s'\n", SvPV_nolen(tok->str));
-    warn(" pos = %d\n", tok->pos);
-    warn(" len = %d\n", tok->len);
-    warn(" u8len = %d\n", tok->u8len);
+    warn(" pos = %ld\n", (unsigned long)tok->pos);
+    warn(" len = %ld\n", (unsigned long)tok->len);
+    warn(" u8len = %ld\n", (unsigned long)tok->u8len);
     warn(" is_match = %d\n", tok->is_match);
+    warn(" is_sentence_start = %d\n", tok->is_sentence_start);
+    warn(" is_sentence_end   = %d\n", tok->is_sentence_end);
     warn(" is_hot   = %d\n", tok->is_hot);
-    warn(" ref_cnt  = %d\n", tok->ref_cnt);
+    warn(" ref_cnt  = %ld\n", (unsigned long)tok->ref_cnt);
 }
 
 /* make a Perl blessed object from a C pointer */
@@ -414,18 +421,19 @@ st_heat_seeker( st_token *token, SV *re ) {
 */
 
 static SV*
-st_tokenize( SV* str, SV* token_re, SV* heat_seeker, IV match_num ) {
+st_tokenize( SV* str, SV* token_re, SV* heat_seeker, I32 match_num ) {
     dTHX;   /* thread-safe perlism */
     dSP;    /* callback macro */
     
 /* declare */
-    IV               num_tokens;
+    IV               num_tokens, prev_sentence_start;
     REGEXP          *rx;
-    char            *buf, *str_start, *str_end;
+    char            *buf, *str_start, *str_end, *token_str;
     STRLEN           str_len;
     const char      *prev_end, *prev_start;
     AV              *tokens;
     AV              *heat;
+    AV              *sentence_starts;
     SV              *tok;
     boolean          heat_seeker_is_CV;
 
@@ -439,6 +447,8 @@ st_tokenize( SV* str, SV* token_re, SV* heat_seeker, IV match_num ) {
     prev_end        = prev_start;
     tokens          = newAV();
     heat            = newAV();
+    sentence_starts = newAV();
+    prev_sentence_start = 0;
     heat_seeker_is_CV  = 0;
     if (heat_seeker != NULL && (SvTYPE(SvRV(heat_seeker))==SVt_PVCV)) {
          heat_seeker_is_CV = 1;
@@ -470,13 +480,25 @@ st_tokenize( SV* str, SV* token_re, SV* heat_seeker, IV match_num ) {
                                 (start_ptr - prev_end),
                                 utf8_distance((U8*)start_ptr, (U8*)prev_end),
                                 prev_end, 0, 0);
+            token_str = SvPV_nolen(token->str);
+            if (st_looks_like_sentence_start(token_str, token->len)) {
+                token->is_sentence_start = 1;
+            }
+            else if (st_looks_like_sentence_end(token_str, token->len)) {
+                token->is_sentence_end = 1;
+            }
             if (ST_DEBUG) {
-                warn("prev [%d] [%d] [%d] [%s]", 
-                    token->pos, token->len, token->u8len, SvPV_nolen(token->str));
+                warn("prev [%d] [%d] [%d] [%s] [%d] [%d]", 
+                    token->pos, token->len, token->u8len, token_str,
+                    token->is_sentence_start, token->is_sentence_end);
             }
             
             tok = st_bless_ptr(ST_CLASS_TOKEN, (IV)token);
             av_push(tokens, SvREFCNT_inc(tok));
+            if (token->is_sentence_start) {
+                //av_push(sentence_starts, newSViv(token->pos));
+                prev_sentence_start = token->pos;
+            }
         }
         
         /* create token object for the current match */            
@@ -485,9 +507,18 @@ st_tokenize( SV* str, SV* token_re, SV* heat_seeker, IV match_num ) {
                             utf8_distance((U8*)end_ptr, (U8*)start_ptr),
                             start_ptr,
                             0, 1);
+        token_str = SvPV_nolen(token->str);
+        if (st_looks_like_sentence_start(token_str, token->len)) {
+            token->is_sentence_start = 1;
+        }
+        else if (st_looks_like_sentence_end(token_str, token->len)) {
+            token->is_sentence_end = 1;
+        }
         if (ST_DEBUG) {
-            warn("[%d] [%d] [%d] [%s]", 
-                token->pos, token->len, token->u8len, SvPV_nolen(token->str));
+            warn("main [%d] [%d] [%d] [%s] [%d] [%d]", 
+                token->pos, token->len, token->u8len, token_str,
+                token->is_sentence_start, token->is_sentence_end
+            );
         }
         
         tok = st_bless_ptr(ST_CLASS_TOKEN, (IV)token);
@@ -503,8 +534,17 @@ st_tokenize( SV* str, SV* token_re, SV* heat_seeker, IV match_num ) {
             }
         }
         av_push(tokens, SvREFCNT_inc(tok));
+        if (token->is_sentence_start) {
+            //av_push(sentence_starts, newSViv(token->pos));
+            prev_sentence_start = token->pos;
+        }
         if (token->is_hot) {
             av_push(heat, newSViv(token->pos));
+            if (ST_DEBUG)
+                warn("%s: sentence_start = %ld for hot token at pos %ld\n",
+                    __func__, (unsigned long)prev_sentence_start, (unsigned long)token->pos);
+                    
+            av_push(sentence_starts, newSViv(prev_sentence_start));
         }
         
         /* remember where we are for next time */
@@ -519,17 +559,30 @@ st_tokenize( SV* str, SV* token_re, SV* heat_seeker, IV match_num ) {
                                     utf8_distance((U8*)str_end, (U8*)prev_end),
                                     prev_end, 
                                     0, 0);
-        if (ST_DEBUG) {
-            warn("tail [%d] [%d] [%d] [%s]", 
-                token->pos, token->len, token->u8len, SvPV_nolen(token->str));
+        token_str = SvPV_nolen(token->str);
+        if (st_looks_like_sentence_start(token_str, token->len)) {
+            token->is_sentence_start = 1;
         }
+        else if (st_looks_like_sentence_end(token_str, token->len)) {
+            token->is_sentence_end = 1;
+        }
+        if (ST_DEBUG) {
+            warn("tail: [%d] [%d] [%d] [%s] [%d] [%d]", 
+                token->pos, token->len, token->u8len, token_str,
+                token->is_sentence_start, token->is_sentence_end
+            );
+        }
+
         tok = st_bless_ptr(ST_CLASS_TOKEN, (IV)token);
         av_push(tokens, SvREFCNT_inc(tok));
+        if (token->is_sentence_start) {
+            //av_push(sentence_starts, newSViv(token->pos));
+        }
     }
         
     return st_bless_ptr(
             ST_CLASS_TOKENLIST, 
-            (IV)st_new_token_list(tokens, heat, num_tokens)
+            (IV)st_new_token_list(tokens, heat, sentence_starts, num_tokens)
            );
 }
 
@@ -604,3 +657,114 @@ static SV *st_escape_xml(char *s) {
     return x;
 }
 
+/* returns the UCS32 value for a UTF8 string -- the character's Unicode value.
+   see http://scripts.sil.org/cms/scripts/page.php?site_id=nrsi&item_id=IWS-AppendixA
+*/
+static IV
+st_utf8_codepoint(
+    const unsigned char *utf8,
+    IV len
+)
+{
+    dTHX;
+    
+    switch (len) {
+
+    case 1:
+        return utf8[0];
+
+    case 2:
+        return (utf8[0] - 192) * 64 + utf8[1] - 128;
+
+    case 3:
+        return (utf8[0] - 224) * 4096 + (utf8[1] - 128) * 64 + utf8[2] - 128;
+
+    case 4:
+    default:
+        return (utf8[0] - 240) * 262144 + (utf8[1] - 128) * 4096 + (utf8[2] - 128) * 64 +
+            utf8[3] - 128;
+
+    }
+}
+
+static IV
+st_looks_like_sentence_start(const unsigned char *ptr, IV len) {
+    dTHX;
+    
+    I32 u8len, u32pt;
+    
+    if (ST_DEBUG)
+        warn("%s: %c\n", __func__, ptr[0]); 
+    
+    /* optimized for ASCII */
+    if (ptr[0] < 128) {
+        return isUPPER(ptr[0]);
+    }
+    
+    /* TODO if any char is UPPER in the string, consider it a start? */
+    
+    /* get first full UTF-8 char */
+    u8len = is_utf8_char((U8*)ptr);
+    if (ST_DEBUG)
+        warn("%s: %s is utf8 u8len %d\n", __func__, ptr, u8len);
+    
+    if (len) {
+        u32pt = st_utf8_codepoint(ptr, u8len);
+        
+        if (ST_DEBUG)
+            warn("%s: u32 code point %d\n", __func__, u32pt);
+        
+        if (iswupper((wint_t)u32pt)) {
+            return 1;
+        }
+        if (u32pt == 191) { /* INVERTED QUESTION MARK */
+            return 1;
+        }
+        
+        /* TODO more here? */
+        
+        return 0;
+    }
+    return 0;
+}
+
+/* does any char in the string look like a sentence ending? */
+static IV
+st_looks_like_sentence_end(const unsigned char *ptr, IV len) {
+    dTHX;
+    
+    IV i;
+    
+    /* right now this assumes ASCII sentence punctuation.
+     * if we ever wanted utf8 support we'd need to iterate
+     * per-character instead of per byte.
+     */
+    
+    if (ST_DEBUG)
+        warn("%s: %c\n", __func__, ptr[0]);
+    
+    for (i=0; i<len; i++) {
+        switch (ptr[i]) {
+            case '.':
+                return 1;
+                break;
+            
+            case '?':
+                return 1;
+                break;
+            
+            case '!':
+                return 1;
+                break;
+                
+            case ';':   /* TODO ? */
+                return 1;
+                break;
+                
+            default:
+                continue;
+                
+        }
+    }
+    return 0;
+}
