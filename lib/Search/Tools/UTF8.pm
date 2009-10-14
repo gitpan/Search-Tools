@@ -22,7 +22,7 @@ our @EXPORT = qw(
 
 our $Debug = ( $ENV{PERL_DEBUG} && $ENV{PERL_DEBUG} > 2 ) ? 1 : 0;
 
-our $VERSION = '0.29';
+our $VERSION = '0.30';
 
 sub to_utf8 {
     my $str = shift;
@@ -49,7 +49,7 @@ sub to_utf8 {
     my $c = Encode::decode( $charset, $str );
     $Debug and carp "converted $c";
 
-    unless ( is_sane_utf8($c) ) {
+    unless ( is_sane_utf8($c, 1) ) {
         carp "not sane: $c";
     }
 

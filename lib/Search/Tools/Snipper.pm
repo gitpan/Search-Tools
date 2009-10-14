@@ -12,7 +12,9 @@ use Search::Tools::HeatMap;
 
 use base qw( Search::Tools::Object );
 
-our $VERSION        = '0.24';
+our $VERSION = '0.30';
+
+# extra space here so pmvers works against $VERSION
 our $ellip          = ' ... ';
 our $DefaultSnipper = 'token';
 
@@ -60,8 +62,8 @@ sub init {
 
     #dump $self;
 
-    $self->{_tokenizer} = Search::Tools::Tokenizer->new(
-        token_re => $self->query->qp->term_re, );
+    $self->{_tokenizer}
+        = Search::Tools::Tokenizer->new( re => $self->query->qp->term_re, );
 
     my $wc = $self->query->qp->word_characters;
 
@@ -182,7 +184,10 @@ sub _token {
         my $snip = join( ' ... ', @snips );
         my $snips_start_with_query = $_[0] =~ m/^\Q$snip\E/;
         my $snips_end_with_query   = $_[0] =~ m/\Q$snip\E$/;
-        my $extract                = join( '',
+        if ( $self->{as_sentences} ) {
+            $snips_start_with_query = 1;
+        }
+        my $extract = join( '',
             ( $snips_start_with_query ? '' : ' ... ' ),
             $snip, ( $snips_end_with_query ? '' : ' ... ' ) );
         return $extract;

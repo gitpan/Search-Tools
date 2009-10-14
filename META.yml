@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Search-Tools
-version:            0.29
+version:            0.30
 abstract:           high-performance tools for building search applications
 author:
     - Peter Karman <karman@cpan.org>
@@ -15,7 +15,7 @@ requires:
     Encode:               0
     File::Slurp:          0
     perl:                 5.008003
-    Rose::ObjectX::CAF:   0
+    Rose::ObjectX::CAF:   0.03
     Search::QueryParser:  0
     Test::More:           0.94
 resources:
