@@ -12,7 +12,7 @@ use Search::Tools::HeatMap;
 
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.31';
+our $VERSION = '0.32';
 
 # extra space here so pmvers works against $VERSION
 our $ellip          = ' ... ';
@@ -62,8 +62,10 @@ sub init {
 
     #dump $self;
 
-    $self->{_tokenizer}
-        = Search::Tools::Tokenizer->new( re => $self->query->qp->term_re, );
+    $self->{_tokenizer} = Search::Tools::Tokenizer->new(
+        re    => $self->query->qp->term_re,
+        debug => $self->debug,
+    );
 
     my $wc = $self->query->qp->word_characters;
 
@@ -97,7 +99,7 @@ sub _pick_snipper {
 # in either of the 2 than the 1.
 sub _normalize_whitespace {
     $_[0] =~ s,[\n\r\t\xa0]+,\ ,go;
-    $_[0] =~ s,\ \ +, ,go;
+    $_[0] =~ s,\ +, ,go; # \ \ + was 16x slower on bigfile!!
 }
 
 sub snip {
