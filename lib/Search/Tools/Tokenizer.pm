@@ -8,7 +8,7 @@ use Search::Tools::TokenList;
 use Search::Tools::UTF8;
 use Carp;
 
-our $VERSION = '0.32';
+our $VERSION = '0.33';
 
 __PACKAGE__->mk_accessors(qw( re ));
 
@@ -155,6 +155,11 @@ A pure-Perl implementation of tokenize(). Mostly written so you can
 see what the XS algorithm does, if you are so inclined, and so the author
 could benchmark the two implementations and thereby feel some satisfaction 
 at having spent the time writing the XS/C version (2-3x faster than Perl).
+
+=head2 get_offsets( I<string>, I<regex> )
+
+Returns an array ref of pos() values for start offsets of I<regex> within
+I<string>
 
 =head2 set_debug( I<n> )
 

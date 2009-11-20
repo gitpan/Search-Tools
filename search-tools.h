@@ -82,6 +82,7 @@ static SV*      st_tokenize(
     I32 match_num 
 );
 static void     st_heat_seeker( st_token *token, SV *re );
+static AV*      st_heat_seeker_offsets( SV *str, SV *re );
 static REGEXP*  st_get_regex_from_sv( SV* regex_sv );
 /* UNUSED
 static SV*      st_new_hash_object(const char *class);
@@ -100,6 +101,7 @@ static void     st_croak(
 static void     st_dump_sv( SV* hash_ref );
 static void     st_describe_object( SV* object );
 static boolean  st_is_ascii( SV* str );
+static boolean  st_char_is_ascii( unsigned char* str, STRLEN len );
 static SV*      st_find_bad_utf8( SV* str );
 static SV*      st_escape_xml(char *s);
 static IV       st_looks_like_sentence_start(const unsigned char *ptr, IV len);

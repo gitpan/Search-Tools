@@ -392,10 +392,15 @@ st_dump_sv(SV* ref) {
     dTHX;
     HV* hash;
     HE* hash_entry;
-    int num_keys, i;
+    AV* array;
+    int num_keys, i, pos, len;
     SV* sv_key;
     SV* sv_val;
     int refcnt;
+    
+    pos = 0;
+    i   = 0;
+    len = 0;
     
     if (SvTYPE(SvRV(ref))==SVt_PVHV) {
         warn("SV is a hash reference");
@@ -412,7 +417,13 @@ st_dump_sv(SV* ref) {
     }
     else if (SvTYPE(SvRV(ref))==SVt_PVAV) {
         warn("SV is an array reference");
-        warn("SV has %d items\n", av_len((AV*)SvRV(ref)));
+        array = (AV*)SvRV(ref);
+        len = av_len(array)+1;
+        warn("SV has %d items\n", len);
+        pos = 0;
+        while (pos < len) {
+            st_describe_object( st_av_fetch(array, pos++) );
+        }
         
     }
 
@@ -456,12 +467,20 @@ static boolean
 st_is_ascii( SV* str ) {
     dTHX;
     STRLEN len;
-    U8 *bytes;
+    char *bytes;
     IV i;
     
-    bytes = (U8*)SvPV(str, len);
+    bytes = SvPV(str, len);
+    return st_char_is_ascii((unsigned char*)bytes, len);
+}
+
+static boolean
+st_char_is_ascii( unsigned char* str, STRLEN len ) {
+    dTHX;
+    IV i;
+    
     for(i=0; i<len; i++) {
-        if (bytes[i] >= 0x80) {
+        if (str[i] >= 0x80) {
             return 0;
         }  
     }
@@ -504,6 +523,42 @@ st_heat_seeker( st_token *token, SV *re ) {
         token->is_hot = 1;
     }
 
+}
+
+static AV*
+st_heat_seeker_offsets( SV *str, SV *re ) {
+    dTHX;
+    
+    REGEXP *rx;
+    char *buf, *str_end, *str_start;
+    STRLEN str_len;
+    AV *offsets;
+    
+    rx = st_get_regex_from_sv(re);
+    buf = SvPV(str, str_len);
+    str_start = buf;
+    str_end = buf + str_len;
+    offsets = newAV();
+    
+    while ( pregexec(rx, buf, str_end, buf, 1, str, 1) ) {
+        const char *start_ptr, *end_ptr;
+        
+#if ((PERL_VERSION > 9) || (PERL_VERSION == 9 && PERL_SUBVERSION >= 5))
+        start_ptr = buf + rx->offs[0].start;
+        end_ptr   = buf + rx->offs[0].end;
+#else
+        start_ptr = buf + rx->startp[0];
+        end_ptr   = buf + rx->endp[0];
+#endif
+        /* advance the pointer */
+        buf = (char*)end_ptr;
+        
+        //warn("got heat match at %ld", start_ptr - str_start);
+        av_push(offsets, newSViv(start_ptr - str_start));
+        
+    }
+            
+    return offsets;
 }
 
 /*
@@ -575,10 +630,10 @@ st_tokenize( SV* str, SV* token_re, SV* heat_seeker, I32 match_num ) {
                                 utf8_distance((U8*)start_ptr, (U8*)prev_end),
                                 prev_end, 0, 0);
             token_str = SvPV_nolen(token->str);
-            if (st_looks_like_sentence_start(token_str, token->len)) {
+            if (st_looks_like_sentence_start((unsigned char*)token_str, token->len)) {
                 token->is_sentence_start = 1;
             }
-            else if (st_looks_like_sentence_end(token_str, token->len)) {
+            else if (st_looks_like_sentence_end((unsigned char*)token_str, token->len)) {
                 token->is_sentence_end = 1;
             }
             if (ST_DEBUG > 1) {
@@ -602,10 +657,10 @@ st_tokenize( SV* str, SV* token_re, SV* heat_seeker, I32 match_num ) {
                             start_ptr,
                             0, 1);
         token_str = SvPV_nolen(token->str);
-        if (st_looks_like_sentence_start(token_str, token->len)) {
+        if (st_looks_like_sentence_start((unsigned char*)token_str, token->len)) {
             token->is_sentence_start = 1;
         }
-        else if (st_looks_like_sentence_end(token_str, token->len)) {
+        else if (st_looks_like_sentence_end((unsigned char*)token_str, token->len)) {
             token->is_sentence_end = 1;
         }
         if (ST_DEBUG > 1) {
@@ -654,10 +709,10 @@ st_tokenize( SV* str, SV* token_re, SV* heat_seeker, I32 match_num ) {
                                     prev_end, 
                                     0, 0);
         token_str = SvPV_nolen(token->str);
-        if (st_looks_like_sentence_start(token_str, token->len)) {
+        if (st_looks_like_sentence_start((unsigned char*)token_str, token->len)) {
             token->is_sentence_start = 1;
         }
-        else if (st_looks_like_sentence_end(token_str, token->len)) {
+        else if (st_looks_like_sentence_end((unsigned char*)token_str, token->len)) {
             token->is_sentence_end = 1;
         }
         if (ST_DEBUG > 1) {
@@ -788,8 +843,23 @@ st_looks_like_sentence_start(const unsigned char *ptr, IV len) {
         warn("%s: %c\n", __func__, ptr[0]); 
     
     /* optimized for ASCII */
-    if (ptr[0] < 128) {
-        return isUPPER(ptr[0]);
+    if (st_char_is_ascii((char*)ptr, len)) {
+        
+        /* if the string is more than one byte long,
+           make sure the second char is NOT UPPER
+           since that is likely a false positive.
+        */
+        if (len > 1) {
+            if (isUPPER(ptr[0]) && !isUPPER(ptr[1])) {
+                return 1;
+            }
+            else {
+                return 0;
+            }
+        }
+        else {
+            return isUPPER(ptr[0]);
+        }
     }
     
     /* TODO if any char is UPPER in the string, consider it a start? */

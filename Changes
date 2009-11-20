@@ -192,3 +192,13 @@ Revision history for Perl extension Search::HiLiter.
 0.32  31 Oct 2009
     * fix mem leaks
     * optimize normalize_whitespace regex 
+
+0.33  19 Nov 2009
+    * switch default Snipper type to 'offset' to optimize for large target texts.
+    * add Tokenizer->get_offsets() method in C/XS.
+    * fix Snipper->show feature to work as the author expected it to. Do not return
+      anything if no match.
+    * refactor is_ascii C code and is_sentence_start() to return false if match on UPPER
+      as opposed to Upper.
+
+

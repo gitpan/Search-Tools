@@ -3,14 +3,14 @@ use strict;
 use warnings;
 use overload
     '""'     => sub { $_[0]->str; },
-    'bool'   => sub { $_[0]->len; },
+    'bool'   => sub { 1 }, # always true
     fallback => 1;
 
 use Search::Tools;    # XS required
 use Carp;
 use base qw( Search::Tools::TokenListUtils );
 
-our $VERSION = '0.32';
+our $VERSION = '0.33';
 
 1;
 
