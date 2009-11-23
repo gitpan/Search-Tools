@@ -12,7 +12,7 @@ use Search::Tools::HeatMap;
 
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.33';
+our $VERSION = '0.34';
 
 # extra space here so pmvers works against $VERSION
 our $ellip          = ' ... ';
@@ -113,7 +113,7 @@ sub snip {
     $text = to_utf8($text);
 
     # don't snip if we're less than the threshold
-    if (length($text) < $self->max_chars) {
+    if ( length($text) < $self->max_chars ) {
         return $text if $self->show;
         return '';
     }
@@ -198,6 +198,7 @@ sub _token {
         return $extract;
     }
     else {
+
         #warn "no spans. using dumb snip";
         return $self->_dumb( $_[0] );
     }
