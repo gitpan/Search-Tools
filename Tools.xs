@@ -129,6 +129,22 @@ is_latin1(string)
         RETVAL
 
 
+void
+debug_bytes(string)
+    SV* string;
+
+    PREINIT:
+        STRLEN         len;
+        unsigned char* bytes;
+        unsigned int   i;
+
+    CODE:
+        bytes  = (unsigned char*)SvPV(string, len);
+        for(i=0; i < len; i++) {
+            warn("'%c' \\x%x \\%d\n", bytes[i], bytes[i], bytes[i]);
+        }
+
+
 IV
 find_bad_ascii(string)
     SV* string;
@@ -143,8 +159,7 @@ find_bad_ascii(string)
         RETVAL = -1;
         for(i=0; i < len; i++) {
             if (bytes[i] >= 0x80) {
-            # return $+[0], so base-1
-                RETVAL = i + 1;
+                RETVAL = i;
                 break;
             }  
         }
@@ -166,8 +181,7 @@ find_bad_latin1(string)
         RETVAL = -1;
         for(i=0; i < len; i++) {
             if (bytes[i] > 0x7f && bytes[i] < 0xa0) {
-            # return $+[0], so base-1
-                RETVAL = i + 1;
+                RETVAL = i;
                 break;
             }
         }

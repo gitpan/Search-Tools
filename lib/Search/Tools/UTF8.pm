@@ -5,11 +5,13 @@ use Carp;
 use Search::Tools;    # XS stuff
 use Encode;
 use charnames ':full';
+use Data::Dump qw( dump );
 use base qw( Exporter );
 our @EXPORT = qw(
     to_utf8
     is_valid_utf8
     is_flagged_utf8
+    is_perl_utf8_string
     is_ascii
     is_latin1
     is_sane_utf8
@@ -18,11 +20,14 @@ our @EXPORT = qw(
     find_bad_latin1
     find_bad_latin1_report
     byte_length
+    looks_like_cp1252
+    fix_cp1252_codepoints_in_utf8
+    debug_bytes
 );
 
 our $Debug = ( $ENV{PERL_DEBUG} && $ENV{PERL_DEBUG} > 2 ) ? 1 : 0;
 
-our $VERSION = '0.37';
+our $VERSION = '0.38';
 
 sub to_utf8 {
     my $str = shift;
@@ -34,9 +39,9 @@ sub to_utf8 {
         return $str;
     }
     if ( is_valid_utf8($str) ) {
-        Encode::_utf8_on($str);
+        my $newstr = Encode::decode_utf8( $str, 1 );
         $Debug and carp "string '$str' is valid utf8; utf8 flag turned on";
-        return $str;
+        return $newstr;
     }
     if ( is_ascii($str) ) {
         Encode::_utf8_on($str);
@@ -49,7 +54,7 @@ sub to_utf8 {
     my $c = Encode::decode( $charset, $str );
     $Debug and carp "converted $c";
 
-    unless ( is_sane_utf8($c, 1) ) {
+    unless ( is_sane_utf8( $c, 1 ) ) {
         carp "not sane: $c";
     }
 
@@ -120,12 +125,72 @@ sub find_bad_latin1_report {
     if ($bad) {
 
         # explain why we failed
-        my $char = substr( $_[0], $bad - 1, 1 );
+        my $char = substr( $_[0], $bad, 1 );
         my $dec  = ord($char);
         my $hex  = sprintf '%x', $dec;
         carp("byte $bad ($char) is not Latin1 (it's $dec dec / $hex hex)");
     }
     return $bad;
+}
+
+sub looks_like_cp1252 {
+    if (   !is_latin1( $_[0] )
+        && !is_ascii( $_[0] )
+        && $_[0] =~ m/[\x80-\x9f]/ )
+    {
+        return 1;
+    }
+    return 0;
+}
+
+my %win1252 = (
+    "\x80" => "\x{20AC}",    #EURO SIGN
+    "\x81" => '',            #UNDEFINED
+    "\x82" => "\x{201A}",    #SINGLE LOW-9 QUOTATION MARK
+    "\x83" => "\x{0192}",    #LATIN SMALL LETTER F WITH HOOK
+    "\x84" => "\x{201E}",    #DOUBLE LOW-9 QUOTATION MARK
+    "\x85" => "\x{2026}",    #HORIZONTAL ELLIPSIS
+    "\x86" => "\x{2020}",    #DAGGER
+    "\x87" => "\x{2021}",    #DOUBLE DAGGER
+    "\x88" => "\x{02C6}",    #MODIFIER LETTER CIRCUMFLEX ACCENT
+    "\x89" => "\x{2030}",    #PER MILLE SIGN
+    "\x8A" => "\x{0160}",    #LATIN CAPITAL LETTER S WITH CARON
+    "\x8B" => "\x{2039}",    #SINGLE LEFT-POINTING ANGLE QUOTATION MARK
+    "\x8C" => "\x{0152}",    #LATIN CAPITAL LIGATURE OE
+    "\x8D" => '',            #UNDEFINED
+    "\x8E" => "\x{017D}",    #LATIN CAPITAL LETTER Z WITH CARON
+    "\x8F" => '',            #UNDEFINED
+    "\x90" => '',            #UNDEFINED
+    "\x91" => "\x{2018}",    #LEFT SINGLE QUOTATION MARK
+    "\x92" => "\x{2019}",    #RIGHT SINGLE QUOTATION MARK
+    "\x93" => "\x{201C}",    #LEFT DOUBLE QUOTATION MARK
+    "\x94" => "\x{201D}",    #RIGHT DOUBLE QUOTATION MARK
+    "\x95" => "\x{2022}",    #BULLET
+    "\x96" => "\x{2013}",    #EN DASH
+    "\x97" => "\x{2014}",    #EM DASH
+    "\x98" => "\x{02DC}",    #SMALL TILDE
+    "\x99" => "\x{2122}",    #TRADE MARK SIGN
+    "\x9A" => "\x{0161}",    #LATIN SMALL LETTER S WITH CARON
+    "\x9B" => "\x{203A}",    #SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
+    "\x9C" => "\x{0153}",    #LATIN SMALL LIGATURE OE
+    "\x9D" => '',            #UNDEFINED
+    "\x9E" => "\x{017E}",    #LATIN SMALL LETTER Z WITH CARON
+    "\x9F" => "\x{0178}",    #LATIN CAPITAL LETTER Y WITH DIAERESIS
+
+);
+
+# fix_latin (used in Transliterate) lacks the check for the
+# prefixed \xc2 byte, but the UTF-8 encoding for these
+# Windows codepoints has the leading \xc2 byte.
+sub fix_cp1252_codepoints_in_utf8 {
+    my $buf = shift;
+    unless ( is_valid_utf8($buf) ) {
+        my $badbyte = find_bad_utf8($buf);
+        croak "bad UTF-8 byte(s) at $badbyte [ " . dump($buf) . " ]";
+    }
+    $Debug and warn "converting $buf\n";
+    $buf =~ s/\xc2([\x80-\x9f])/$win1252{$1}/g;
+    return $buf;
 }
 
 1;
@@ -241,6 +306,35 @@ converting to UTF-8 if necessary. Returns I<text> encoded and flagged as UTF-8.
 
 Returns undef if for some reason the encoding failed or the result did not pass
 is_sane_utf8().
+
+=head2 looks_like_cp1252( I<text> )
+
+This function tests that there are bytes in I<text>
+between B<0x80> and B<0x9f> inclusive.
+Those bytes are used by the Windows-1252 character set and include some
+of the troublesome characters like curly quotes.
+
+See also fix_cp1252_codepoints_in_utf8()
+and the Search::Tools::Transliterate convert1252() method.
+
+=head2 fix_cp1252_codepoints_in_utf8( I<text> )
+
+The Windows-1252 codepoints between B<0x80> and B<0x9f> may be encoded
+validly as UTF-8 but the Unicode standard does not map any characters
+at those codepoints. fix_cp1252_codepoints_in_utf8() converts
+a UTF-8 encoded string I<text> to map the suspect 1252 codepoints to
+their correct Unicode representations.
+
+Note that fix_cp1252_codepoints_in_utf8() is different from the fix_latin()
+function used in Transliterate, which does not differentiate between
+a Windows-1252 encoded string and a UTF-8 encoded string.
+
+This function will croak if I<text> does not pass is_valid_utf8().
+
+=head2 debug_bytes( I<text> )
+
+Iterates over each byte in I<text>, printing byte, hex and decimal values
+to stderr.
 
 =head1 AUTHOR
 

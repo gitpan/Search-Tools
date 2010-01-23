@@ -5,13 +5,14 @@ use base qw( Search::Tools::Object );
 use Search::Tools::UTF8;
 use Carp;
 use Encode;
+use Encoding::FixLatin qw( fix_latin );
 use Data::Dump qw( dump );
 
 __PACKAGE__->mk_accessors(qw( ebit ));
 
 __PACKAGE__->mk_ro_accessors(qw( map ));
 
-our $VERSION = '0.37';
+our $VERSION = '0.38';
 
 =pod
 
@@ -76,7 +77,22 @@ NOTE: The map() method is an accessor only. You can not pass in a new map.
 
 Returns UTF-8 I<text> converted with all single bytes, transliterated according
 to %Map. Will croak if I<text> is not valid UTF-8, so if in doubt, check first with
-is_valid_utf8() in Search::Tools::UTF8;
+is_valid_utf8() in Search::Tools::UTF8.
+
+=head2 convert1252( I<text> )
+
+Returns UTF-8 I<text> converted to all single byte characters,
+transliterated with convert() and the Windows 1252 characters in the range
+B<0x80> and B<0x9f> inclusive. 
+
+The 1252 codepoints are converted first to
+their UTF-8 counterparts per 
+http://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/WINDOWS/CP1252.TXT
+using Encoding::FixLatin::fix_latin() and then 
+I<text> is run through convert().
+
+Note that I<text> is checked with the looks_like_cp1252() function from
+Search::Tools::UTF8 before calling fix_latin().
 
 =head1 BUGS
 
@@ -137,14 +153,14 @@ L<http://search.cpan.org/dist/Search-Tools/>
 
 =head1 COPYRIGHT
 
-Copyright 2006-2009 by Peter Karman.
+Copyright 2006-2010 by Peter Karman.
 
 This package is free software; you can redistribute it and/or modify it under the 
 same terms as Perl itself.
 
 =head1 SEE ALSO
 
-Search::Tools::UTF8, Unicode::Map, Encode, Test::utf8
+Search::Tools::UTF8, Unicode::Map, Encode, Test::utf8, Encoding::FixLatin
 
 =cut
 
@@ -234,13 +250,24 @@ sub convert {
             $newbuf .= ' ';
         }
         else {
-            $self->debug and warn "transliterate $char\n";
+            $self->debug and warn "transliterate $char => $map->{$char}\n";
             $newbuf .= $map->{$char};
         }
 
     }
 
     return $newbuf;
+}
+
+sub convert1252 {
+    my ( $self, $buf ) = @_;
+
+    # don't bother unless we have non-ascii bytes
+    return $buf if is_ascii($buf);
+
+    $self->debug and warn "converting $buf\n";
+    my $newbuf = looks_like_cp1252($buf) ? fix_latin($buf) : $buf;
+    return $self->convert($newbuf);
 }
 
 1;
