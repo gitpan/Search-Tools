@@ -5,7 +5,7 @@ use Carp;
 use Data::Dump qw( dump );
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.39';
+our $VERSION = '0.40';
 
 # debuggin only
 my $OPEN  = '[';
@@ -16,7 +16,15 @@ if ( !$@ ) {
     $CLOSE = Term::ANSIColor::color('reset') . $CLOSE;
 }
 
-__PACKAGE__->mk_accessors(qw( window_size tokens spans as_sentences ));
+__PACKAGE__->mk_accessors(
+    qw( window_size
+        tokens
+        spans
+        as_sentences
+        _treat_phrases_as_singles
+        _qre
+        )
+);
 
 =head1 NAME
 

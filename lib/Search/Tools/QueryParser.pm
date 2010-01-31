@@ -12,7 +12,7 @@ use Search::Tools::UTF8;
 use Search::Tools::XML;
 use Search::Tools::RegEx;
 
-our $VERSION = '0.39';
+our $VERSION = '0.40';
 
 my $XML = Search::Tools::XML->new();
 my $C2E = $XML->char2ent_map;
@@ -356,7 +356,11 @@ sub _get_value_from_tree {
 
         for my $leaf (@branches) {
             my $v = $leaf->{value};
-            next if exists $self->ignore_fields->{ $leaf->{field} };
+            if ( defined $leaf->{field}
+                and exists $self->ignore_fields->{ $leaf->{field} } )
+            {
+                next;
+            }
 
             if ( ref $v ) {
                 $self->_get_value_from_tree( $uniq, $v, $c );

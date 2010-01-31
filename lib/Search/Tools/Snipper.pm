@@ -12,7 +12,7 @@ use Search::Tools::HeatMap;
 
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.39';
+our $VERSION = '0.40';
 
 # extra space here so pmvers works against $VERSION
 our $ellip          = ' ... ';
@@ -23,6 +23,7 @@ __PACKAGE__->mk_accessors(
         query
         occur
         context
+        ignore_length
         max_chars
         word_len
         show
@@ -35,20 +36,23 @@ __PACKAGE__->mk_accessors(
         collapse_whitespace
         use_pp
         as_sentences
+        treat_phrases_as_singles
         )
 );
 
 my %Defaults = (
-    type                => $DefaultSnipper,
-    occur               => 5,
-    max_chars           => 300,
-    context             => 8,
-    word_len            => 4,                 # TODO still used?
-    show                => 1,
-    collapse_whitespace => 1,
-    escape              => 0,
-    force               => 0,
-    as_sentences        => 0,
+    type                     => $DefaultSnipper,
+    occur                    => 5,
+    max_chars                => 300,
+    context                  => 8,
+    word_len                 => 4,                 # TODO still used?
+    show                     => 1,
+    collapse_whitespace      => 1,
+    escape                   => 0,
+    force                    => 0,
+    as_sentences             => 0,
+    ignore_length            => 0,
+    treat_phrases_as_singles => 1,
 );
 
 sub init {
@@ -72,7 +76,8 @@ sub init {
     # regexp for splitting into terms in _re()
     $self->{_wc_regexp} = qr/[^$wc]+/io;
 
-    $self->{_qre} = $self->query->terms_as_regex;
+    $self->{_qre}
+        = $self->query->terms_as_regex( $self->treat_phrases_as_singles );
 
     $self->count(0);
 
@@ -113,7 +118,7 @@ sub snip {
     $text = to_utf8($text);
 
     # don't snip if we're less than the threshold
-    if ( length($text) < $self->max_chars ) {
+    if ( length($text) < $self->max_chars && !$self->ignore_length ) {
         return $text if $self->show;
         return '';
     }
@@ -131,11 +136,11 @@ sub snip {
     $self->debug and warn "snipped: '$s'\n";
 
     # sanity check
-    if ( length($s) > ( $self->max_chars * 4 ) ) {
+    if ( length($s) > ( $self->max_chars * 4 ) && !$self->ignore_length ) {
         $s = $self->_dumb($s);
         $self->debug and warn "too long. dumb snip: '$s'\n";
     }
-    elsif ( !length($s) ) {
+    elsif ( !length($s) && !$self->ignore_length ) {
         $s = $self->_dumb($text);
         $self->debug and warn "too short. dumb snip: '$s'\n";
     }
@@ -163,9 +168,12 @@ sub _token {
     my $tokens = $self->{_tokenizer}->$method( $_[0], qr/^$qre$/ );
 
     my $heatmap = Search::Tools::HeatMap->new(
-        tokens       => $tokens,
-        window_size  => $self->{context},
-        as_sentences => $self->{as_sentences},
+        tokens                    => $tokens,
+        window_size               => $self->{context},
+        as_sentences              => $self->{as_sentences},
+        debug                     => $self->debug,
+        _qre                      => $qre,
+        _treat_phrases_as_singles => $self->{treat_phrases_as_singles},
     );
 
     $self->debug and dump $heatmap;
@@ -785,7 +793,9 @@ Available via new().
 
 The maximum number of characters (not bytes! under Perl >= 5.8) to return
 in a snippet. B<NOTE:> This is only used to test whether I<test> is worth
-snipping at all, or if no terms are found (see show()).
+snipping at all, or if no terms are found.
+
+See also show() and ignore_length().
 
 Available via new().
 
@@ -886,6 +896,20 @@ Available via new().
 Set to a true value to use Tokenizer->tokenize_pp() and TokenListPP
 and TokenPP instead of the XS versions of the same. XS is the default
 and is much faster, but harder to modify or subclass.
+
+Available via new().
+
+=head2 ignore_length
+
+Boolean flag. If set to false (default) then C<max_chars> is respected.
+If set to true, C<max_chars> is ignored.
+
+Available via new().
+
+=head2 treat_phrases_as_singles
+
+Boolean flag. If set to true (default), individual terms within a phrase
+are considered a match. If false, 
 
 =head2 snip( I<text> )
 
