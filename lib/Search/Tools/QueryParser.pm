@@ -12,7 +12,7 @@ use Search::Tools::UTF8;
 use Search::Tools::XML;
 use Search::Tools::RegEx;
 
-our $VERSION = '0.47';
+our $VERSION = '0.48';
 
 my $XML = Search::Tools::XML->new();
 my $C2E = $XML->char2ent_map;
@@ -369,6 +369,17 @@ sub _get_value_from_tree {
                 }
             }
             else {
+
+                # if the $leaf is a proximity query,
+                # ignore the "phrase-ness" of it and split
+                # on whitespace. This is a compromise,
+                # mitigated by the tendency of HeatMap
+                # to reward proximity anyway.
+                if ( $leaf->{proximity} and $leaf->{proximity} > 1 ) {
+                    my @tokens = split( m/\ +/, $v );
+                    $uniq->{$_} = ++$c for @tokens;
+                    next;
+                }
 
                 # collapse any whitespace
                 $v =~ s,\s+,\ ,g;
