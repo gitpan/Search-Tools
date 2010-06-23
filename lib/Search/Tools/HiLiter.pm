@@ -6,7 +6,7 @@ use Carp;
 use Search::Tools::XML;
 use Search::Tools::UTF8;
 
-our $VERSION = '0.51';
+our $VERSION = '0.52';
 
 my $XML = Search::Tools::XML->new;
 
@@ -56,21 +56,38 @@ sub keywords {
 sub _phrases {
     my $self = shift;
     my $q    = $self->{query};
-    return grep { $q->regex_for($_)->is_phrase } @{ $q->terms };
+    return grep { $self->_regex_for($_)->is_phrase } @{ $q->terms };
 }
 
 sub _singles {
     my $self = shift;
     my $q    = $self->{query};
-    return grep { !$q->regex_for($_)->is_phrase } @{ $q->terms };
+    return grep { !$self->_regex_for($_)->is_phrase } @{ $q->terms };
 }
 
 sub _kworder {
     my $self = shift;
+    my $q    = $self->{query};
+    my $qstr = $q->str;
+    if ( exists $self->{_kworder_cache}->{$qstr} ) {
+        return @{ $self->{_kworder_cache}->{$qstr} };
+    }
 
     # do phrases first so that duplicates privilege phrases
+    my ( @phrases, @singles );
 
-    return ( $self->_phrases, $self->_singles );
+    for ( @{ $q->terms } ) {
+        if ( $self->_regex_for($_)->is_phrase ) {
+            push @phrases, $_;
+        }
+        else {
+            push @singles, $_;
+        }
+    }
+
+    $self->{_kworder_cache}->{$qstr} = [ @phrases, @singles ];
+
+    return ( @phrases, @singles );
 }
 
 sub _build_tags {
@@ -189,6 +206,16 @@ sub _get_real_html {
 
 }
 
+sub _regex_for {
+    my $self = shift;
+    my $term = shift or croak "term required";
+    if ( exists $self->{_regex_for}->{$term} ) {
+        return $self->{_regex_for}->{$term};
+    }
+    $self->{_regex_for}->{$term} = $self->query->regex_for($term);
+    return $self->{_regex_for}->{$term};
+}
+
 # based on HTML::HiLiter hilite()
 sub html {
     my $self = shift;
@@ -216,7 +243,7 @@ sub html {
     $text_copy =~ s/\002.*?\003//sgi;
 
 Q: for my $query (@kworder) {
-        my $re = $self->query->regex_for($query)->html;
+        my $re = $self->_regex_for($query)->html;
         my $real = $self->_get_real_html( \$text_copy, $re );
 
     R: for my $r ( keys %$real ) {
@@ -354,18 +381,28 @@ sub _clean_up_hilites {
 
 # based on HTML::HiLiter plaintext()
 sub plain {
-    my $self = shift;
-    my $text = shift or croak "need text to light()";
-
+    my $self      = shift;
+    my $text      = shift or croak "need text to light()";
+    my $debug     = $self->debug;
     my $query_obj = $self->{query};
+    my @kworder   = $self->_kworder;
 
-Q: for my $query ( $self->_kworder ) {
-        my $re            = $query_obj->regex_for($query)->plain;
+Q: for my $query (@kworder) {
+        my $regex         = $self->_regex_for($query);
+        my $re            = $regex->plain;
+        my $term_re       = $regex->term_re;
         my $o             = $self->open_tag($query);
         my $c             = $self->close_tag($query);
         my $length_we_add = length( $o . $c ) - 1;
 
-        $self->debug > 1
+        # cache this
+        my $query_re = $self->{_compiled_query_regex}->{"$query"}
+            || quotemeta($query);
+        if ( !$self->{_compiled_query_regex}->{"$query"} ) {
+            $self->{_compiled_query_regex}->{"$query"} = qr/$query_re/;
+        }
+
+        $debug > 1
             and carp
             "plain hiliter looking for: $re against '$query' in '$text'";
 
@@ -375,9 +412,9 @@ Q: for my $query ( $self->_kworder ) {
         # this can suck into an infinite loop because increm pos()-- results
         # in repeated match on nonwordchar: > (since we just added a tag)
 
-        if ( $self->debug ) {
-            if ( $text =~ m/\b\Q$query\E\b/i && $text !~ m/$re/i ) {
-                my ($snip) = ( $text =~ m/(.....\Q$query\E.....)/gi );
+        if ($debug) {
+            if ( $text =~ m/\b$query_re\b/i && $text !~ m/$re/i ) {
+                my ($snip) = ( $text =~ m/(.....$query_re.....)/gi );
                 croak "bad regex for '$query' [$snip]: $re";
             }
         }
@@ -391,7 +428,7 @@ Q: for my $query ( $self->_kworder ) {
 
             $found_matches++;
 
-            $self->debug > 1 and carp "matched $s $m $e against $re";
+            $debug > 1 and carp "matched $s $m $e against $re";
 
             # use substr to do what s/// would normally do
             # if pos() wasn't an issue -- is this a big speed diff?
@@ -407,11 +444,11 @@ Q: for my $query ( $self->_kworder ) {
 
         }
 
-        $self->debug and warn "found $found_matches matches";
+        $debug and warn "found $found_matches matches";
 
         # sanity check similar to Snipper->_re_snip()
-        if ( !$found_matches and $text =~ m/\Q$query\E/ ) {
-            $self->debug and warn "ERROR: regex failure for '$query'";
+        if ( $debug and !$found_matches and $text =~ m/$query_re/ ) {
+            $debug and warn "ERROR: regex failure for '$query'";
             $text = $self->html($text);
         }
 

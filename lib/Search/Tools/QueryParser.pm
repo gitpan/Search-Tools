@@ -12,7 +12,7 @@ use Search::Tools::UTF8;
 use Search::Tools::XML;
 use Search::Tools::RegEx;
 
-our $VERSION = '0.51';
+our $VERSION = '0.52';
 
 my $XML = Search::Tools::XML->new();
 my $C2E = $XML->char2ent_map;
@@ -111,11 +111,12 @@ sub parse {
     my $extracted = $self->_extract_terms($query_str);
     my %regex;
     for my $term ( @{ $extracted->{terms} } ) {
-        my ( $plain, $html ) = $self->_build_regex($term);
+        my ( $plain, $html, $escaped ) = $self->_build_regex($term);
         $regex{$term} = Search::Tools::RegEx->new(
             plain     => $plain,
             html      => $html,
             term      => $term,
+            term_re   => qr/$escaped/i,
             is_phrase => ( $term =~ m/\ / ? 1 : 0 ),
         );
     }
@@ -541,7 +542,7 @@ ${end_bound}
 )
 /xis;
 
-    return ( $plain, $html );
+    return ( $plain, $html, $escaped );
 }
 
 sub _build_term_re {
