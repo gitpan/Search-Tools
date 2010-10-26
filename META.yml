@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Search-Tools
-version:            0.54
+version:            0.55
 abstract:           high-performance tools for building search applications
 author:
     - Peter Karman <karman@cpan.org>
