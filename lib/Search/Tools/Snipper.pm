@@ -12,11 +12,16 @@ use Search::Tools::HeatMap;
 
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 # extra space here so pmvers works against $VERSION
 our $ellip          = ' ... ';
 our $DefaultSnipper = 'offset';
+
+#
+#   TODO allow for returning an array ref of
+#   extracts instead of joining them all with $ellip
+#
 
 __PACKAGE__->mk_accessors(
     qw(

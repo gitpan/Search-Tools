@@ -5,9 +5,9 @@ use Carp;
 use Data::Dump qw( dump );
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
-# debuggin only
+# debugging only
 my $OPEN  = '[';
 my $CLOSE = ']';
 eval { require Term::ANSIColor; };
