@@ -5,7 +5,7 @@ use Carp;
 use base qw( Search::Tools::Object );
 use Search::Tools;    # XS required
 
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 
 =pod
 
@@ -65,16 +65,47 @@ Complete map of all named HTML entities to their decimal values.
 
 # regexp for what constitutes whitespace in an HTML doc
 # it's not as simple as \s|&nbsp; so we define it separately
+my @white_hex_pts = qw(
+    0009
+    000a
+    000b
+    000c
+    000d
+    0020
+    00a0
+    2000
+    2001
+    2002
+    2003
+    2004
+    2005
+    2006
+    2007
+    2008
+    2009
+    200a
+    200b
+    2028
+    2029
+    202f
+    205f
+    3000
+    feff
+);
+
+my @whitesp = ('\s');
 
 # NOTE that the pound sign # needs escaping because we use
 # the 'x' flag in our regexp.
 
-my @whitesp = (
-    '&\#0020;', '&\#0009;', '&\#000C;', '&\#200B;', '&\#2028;', '&\#2029;',
-    '&nbsp;',   '&\#32;',   '&\#160;',  '\s',       '\xa0',     '\x20',
-);
+for my $w (@white_hex_pts) {
+    push @whitesp, sprintf( "&\\#x%s;", $w );                # hex entity
+    push @whitesp, sprintf( "&\\#%s;",  hex($w) );           # dec entity
+    push @whitesp, sprintf( "%s",       chr( hex($w) ) );    # byte value
+}
 
-my $whitespace = join( '|', @whitesp );
+my $HTML_WHITESPACE = join( '|', @whitesp );
+my $WHITESPACE = join( '|', map { chr( hex($_) ) } @white_hex_pts );
 
 # HTML entity table
 # this just removes a dependency on another module...
@@ -374,7 +405,7 @@ HTML whitespace entities.
 
 =cut
 
-sub html_whitespace {$whitespace}
+sub html_whitespace {$HTML_WHITESPACE}
 
 =head2 char2ent_map
 
@@ -501,7 +532,7 @@ sub utf8_safe {
     return $t;
 }
 
-=head2 no_html( I<text> )
+=head2 no_html( I<text> [, I<normalize_whitespace>] )
 
 no_html() is a brute-force method for removing all tags and entities
 from I<text>. A simple regular expression is used, so things like
@@ -511,17 +542,26 @@ HTML::Parser or similar.
 
 I<text> is returned with no markup in it.
 
+If I<normalize_whitespace> is true (defaults to false) then
+all whitespace is normalized away to ASCII space (U+0020).
+This can be helpful if you have Unicode entities representing 
+line breaks or other layout instructions.
+
 =cut
 
 sub no_html {
-    my $class = shift;
-    my $text  = shift;
+    my $class                = shift;
+    my $text                 = shift;
+    my $normalize_whitespace = shift || 0;
     if ( !defined $text ) {
         croak "text required";
     }
     my $re = $class->tag_re;
     $text =~ s,$re,,g;
     $text = $class->unescape($text);
+    if ($normalize_whitespace) {
+        $text =~ s/\s+/ /g;
+    }
     return $text;
 }
 
