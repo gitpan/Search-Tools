@@ -12,7 +12,7 @@ use Search::Tools::UTF8;
 use Search::Tools::XML;
 use Search::Tools::RegEx;
 
-our $VERSION = '0.60';
+our $VERSION = '0.61';
 
 my $XML = Search::Tools::XML->new();
 my $C2E = $XML->char2ent_map;
@@ -32,28 +32,29 @@ my ( $locale, $lang, $charset );
 }
 
 my %Defaults = (
-    locale                  => $locale,
+    and_word                => q/and|near\d*/,
     charset                 => $charset,
-    lang                    => $lang,
-    stopwords               => [],
-    wildcard                => q/*/,
-    term_re                 => qr/\w+(?:[\'\-]\w+)*/,
-    word_characters         => q/\w/ . quotemeta(q/'-/),
+    default_field           => "",
+    ignore_case             => 1,
+    ignore_fields           => {},
     ignore_first_char       => quotemeta(q/'-/),
     ignore_last_char        => quotemeta(q/'-/),
-    tag_re                  => $XML->tag_re,
-    whitespace              => $XML->html_whitespace,
-    stemmer                 => undef,
-    phrase_delim            => q/"/,
-    ignore_case             => 1,
-    and_word                => q/and|near\d*/,
-    or_word                 => q/or/,
+    lang                    => $lang,
+    locale                  => $locale,
     not_word                => q/not/,
-    ignore_fields           => {},
-    treat_uris_like_phrases => 1,
+    or_word                 => q/or/,
+    phrase_delim            => q/"/,
     query_class             => 'Search::Tools::Query',
-    default_field           => "",
     query_dialect           => "Search::Query::Dialect::Native",
+    stemmer                 => undef,
+    stopwords               => [],
+    tag_re                  => $XML->tag_re,
+    term_re                 => qr/\w+(?:[\'\-]\w+)*/,
+    term_min_length         => 1,
+    treat_uris_like_phrases => 1,
+    whitespace              => $XML->html_whitespace,
+    wildcard                => q/*/,
+    word_characters         => q/\w/ . quotemeta(q/'-/),
 );
 
 __PACKAGE__->mk_accessors( keys %Defaults );
@@ -110,7 +111,7 @@ sub parse {
     #$query_str = to_utf8( $query_str, $self->charset );
     my $extracted = $self->_extract_terms($query_str);
     my %regex;
-    for my $term ( @{ $extracted->{terms} } ) {
+TERM: for my $term ( @{ $extracted->{terms} } ) {
         my ( $plain, $html, $escaped ) = $self->_build_regex($term);
         $regex{$term} = Search::Tools::RegEx->new(
             plain     => $plain,
@@ -144,6 +145,7 @@ sub _extract_terms {
     my $default_field = $self->default_field;
     my $esc_wildcard  = quotemeta($wildcard);
     my $word_re       = qr/(($esc_wildcard)?[$wordchar]+($esc_wildcard)?)/;
+    my $min_length    = $self->term_min_length;
 
     # backcompat allows for query to be array ref.
     # this called only from S::T::Keywords
@@ -188,7 +190,7 @@ U: for my $u ( sort { $uniq{$a} <=> $uniq{$b} } keys %uniq ) {
         if ( $self->treat_uris_like_phrases ) {
 
             # special case: treat email addresses, uris, as phrase
-            $isphrase ||= $u =~ m/[$wordchar][\@\.\\][$wordchar]/ || 0;
+            $isphrase ||= $u =~ m/[$wordchar][\@\.\\\/][$wordchar]/ || 0;
         }
 
         $self->debug && carp "$u -> isphrase = $isphrase";
@@ -266,6 +268,12 @@ U: for my $u ( sort { $uniq{$a} <=> $uniq{$b} } keys %uniq ) {
             # since the * will match both
             delete( $words{$copy} );
         }
+
+        if ( length $_ < $min_length ) {
+            $self->debug and carp "token too short: '$_'";
+            delete $words{$_};
+        }
+
     }
 
     $self->debug && carp "wildcards removed: " . Data::Dump::dump( \%words );
@@ -602,6 +610,7 @@ Search::Tools::QueryParser - convert string queries into objects
             word_characters     => q/\w\'\-/,
             ignore_first_char   => q/\+\-/,
             ignore_last_char    => q/\+\-/,
+            term_min_length     => 1,
             
         # words to ignore
             stopwords           => [qw( the )],
@@ -712,6 +721,8 @@ will be tokenized into words based on whitespace, then the stopwords removed.
 =head2 tag_re
 
 =head2 term_re
+
+=head2 term_min_length
 
 =head2 whitespace
 
