@@ -5,7 +5,7 @@ use Carp;
 use base qw( Search::Tools::Object );
 use Search::Tools;    # XS required
 
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 
 =pod
 
@@ -634,7 +634,7 @@ sub unescape_named {
         # named entities - check first to see if it is worth looping
         if ( $t =~ m/&[a-zA-Z0-9]+;/ ) {
             for ( keys %HTML_ents ) {
-                if ( my $n = $t =~ s/&$_;/chr($HTML_ents{$_})/egi ) {
+                if ( my $n = $t =~ s/&$_;/chr($HTML_ents{lc $_})/egi ) {
 
                     #warn "replaced $_ -> $HTML_ents{$_} $n times in text";
                 }
