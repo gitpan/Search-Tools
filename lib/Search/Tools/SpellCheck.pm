@@ -6,12 +6,13 @@ use base qw( Search::Tools::Object );
 use Text::Aspell;
 use Search::Tools::QueryParser;
 
-our $VERSION = '0.66';
+our $VERSION = '0.67';
 
 __PACKAGE__->mk_accessors(
     qw(
         max_suggest
         dict
+        lang
         aspell
         query_parser
         )
@@ -27,7 +28,8 @@ sub init {
             or croak "can't get new() Text::Aspell"
     );
 
-    $self->aspell->set_option( 'lang', $self->{query_parser}->lang );
+    $self->aspell->set_option( 'lang',
+        ( $self->{lang} || $self->{query_parser}->lang ) );
     $self->_check_err;
     $self->aspell->set_option( 'sug-mode', 'fast' );
     $self->_check_err;
