@@ -98,4 +98,5 @@ t/Search-Tools.t
 t/SnipHelp.pm
 Tools.xs
 typemap
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
