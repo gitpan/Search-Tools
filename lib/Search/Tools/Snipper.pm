@@ -11,7 +11,7 @@ use Search::Tools::HeatMap;
 
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.72';
+our $VERSION = '0.73';
 
 # extra space here so pmvers works against $VERSION
 our $ellip          = ' ... ';
@@ -86,6 +86,7 @@ sub init {
 
     $self->count(0);
 
+    return $self;
 }
 
 # I tried Text::Context but that was too slow.
@@ -172,6 +173,8 @@ sub _token {
     my $qre_ORd = $qre;
     $qre_ORd =~ s/(\\ )+/\|/g;
     my $tokens = $self->{_tokenizer}->$method( $_[0], qr/^$qre_ORd$/ );
+
+    #$self->debug and $tokens->dump;
 
     my $heatmap = Search::Tools::HeatMap->new(
         tokens                    => $tokens,

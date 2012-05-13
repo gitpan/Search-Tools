@@ -6,7 +6,7 @@ use base qw( Rose::ObjectX::CAF );
 use Scalar::Util qw( blessed );
 use Search::Tools::MethodMaker;
 
-our $VERSION = '0.72';
+our $VERSION = '0.73';
 
 __PACKAGE__->mk_accessors(qw( debug ));
 
@@ -69,17 +69,9 @@ if init() tried to set values with them.
 =cut
 
 sub init {
-
-    #Carp::cluck();
-    my $self = shift;
-
-    #Carp::carp("self shifted");
+    my $self = shift(@_);
     $self->SUPER::init(@_);
-
-    #Carp::carp("self inited");
     $self->{debug} ||= $ENV{PERL_DEBUG} || 0;
-
-    #Carp::carp("debug set");
     return $self;
 }
 

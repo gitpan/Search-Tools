@@ -6,10 +6,12 @@ use Carp;
 use Scalar::Util qw( openhandle );
 use File::Basename;
 
-our $VERSION = '0.72';
+our $VERSION = '0.73';
 
 use XSLoader;
 XSLoader::load( 'Search::Tools', $VERSION );
+
+our $XS_DEBUG = 0;
 
 sub parser {
     my $class = shift;
