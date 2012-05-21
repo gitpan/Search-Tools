@@ -6,7 +6,7 @@ use base qw( Search::Tools::Object );
 use Search::Tools;    # XS required
 use Search::Tools::UTF8;
 
-our $VERSION = '0.73';
+our $VERSION = '0.74';
 
 =pod
 
@@ -704,6 +704,12 @@ whenever an array of hashrefs is found. Example:
 Obviously stripping the final C<s> will not always render sensical tag names.
 Pass a CODE ref instead, expecting one value (the tag name) and returning the
 tag name to use:
+
+ my $xml = $utils->perl_to_xml($data, 'data', sub {
+     my $tag = shift;
+     $tag =~ s/foo/BAR/;
+     return $tag;
+ });
 
 =cut
 
