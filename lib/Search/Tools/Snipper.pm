@@ -11,7 +11,7 @@ use Search::Tools::HeatMap;
 
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.74';
+our $VERSION = '0.75';
 
 # extra space here so pmvers works against $VERSION
 our $ellip          = ' ... ';
@@ -210,10 +210,18 @@ sub _token {
             $snips_start_with_query = 1;
             $snips_end_with_query = $snip =~ m/[\.\?\!]\s*$/;
         }
-        my $extract = join( '',
-            ( $snips_start_with_query ? '' : $ellip ),
-            $snip, ( $snips_end_with_query ? '' : $ellip ) );
-        return $extract;
+
+        # if we are pulling out something less than the entire
+        # text, insert ellipses...
+        if ( $_[0] ne $snip ) {
+            my $extract = join( '',
+                ( $snips_start_with_query ? '' : $ellip ),
+                $snip, ( $snips_end_with_query ? '' : $ellip ) );
+            return $extract;
+        }
+        else {
+            return $snip;
+        }
     }
     else {
 

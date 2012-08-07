@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 use strict;
-use Test::More tests => 19; 
+use Test::More tests => 22;
 use Search::Tools::Tokenizer;
 use Search::Tools::UTF8;
 use Search::Tools::Snipper;
@@ -42,14 +42,23 @@ ok( $tokens->get_token(1)->is_sentence_end, "second token is sentence end" );
 #dump( $tokens->get_sentence_starts );
 
 # utf8 w/ punc start
-ok( $tokens = $tokenizer->tokenize( to_utf8("¿Cómo estás?"), qr/\w/ ),
-    "tokenize spanish" );
-ok( $tokens->get_token(0)->is_sentence_start,
-    "spanish " . $tokens->get_token(0) . " starts sentence" );
+ok( $tokens = $tokenizer->tokenize(
+        to_utf8("¿Cómo estás? is Èste! ¿is super Èste? "), qr/\w/
+    ),
+    "tokenize spanish"
+);
+ok( $tokens->get_token(0)->is_sentence_start, "spanish ¿ starts sentence" );
+TODO: {
+    local $TODO = 'C is hard.';
+    ok( $tokens->get_token(8)->is_sentence_start,
+        "spanish ¿ starts sentence in middle of the string"
+    );
+}
 ok( $tokens->get_token( $tokens->len - 1 )->is_sentence_end,
-    "last ? ends sentence" );
+    "punctuation ends sentence" );
 
 #dump( $tokens->get_sentence_starts );
+#$tokens->dump;
 
 ok( my $snipper = Search::Tools::Snipper->new(
         query        => 'foo',
@@ -84,6 +93,11 @@ my $long_snipper = Search::Tools->snipper(
 );
 
 ok( my $long_snip = $long_snipper->snip($long_text), "snip long text" );
+is( $long_snipper->snip('foo'), 'foo', "easy optimization for single term" );
+is( $long_snipper->snip('foo bar baz foo'),
+    'foo bar baz foo',
+    "slightly harder optimization"
+);
 
 #diag($long_snip);
 is( $long_snip, $long_text_snip, "long text snip" );
