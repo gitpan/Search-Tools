@@ -6,7 +6,7 @@ use Carp;
 
 #use Data::Dump qw( dump );
 
-our $VERSION = '0.75';
+our $VERSION = '0.76';
 
 __PACKAGE__->mk_ro_accessors(
     qw(
@@ -15,6 +15,7 @@ __PACKAGE__->mk_ro_accessors(
         term
         term_re
         is_phrase
+        phrase_terms
         )
 );
 
@@ -44,6 +45,12 @@ Search::Tools::RegEx - regular expressions for terms
 =head2 term_re
 
 =head2 is_phrase
+
+=head2 phrase_terms
+
+If B<is_phrase> is true, B<phrase_terms> will contain an ARRAY ref
+of Search::Tools::RegEx objects, each one representing a term
+in the phrase.
 
 =cut
 
