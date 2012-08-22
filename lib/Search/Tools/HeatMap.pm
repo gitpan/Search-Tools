@@ -5,7 +5,7 @@ use Carp;
 use Data::Dump qw( dump );
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.77';
+our $VERSION = '0.78';
 
 # debugging only
 my $OPEN  = '[';
@@ -151,34 +151,64 @@ sub _as_sentences {
     my $sentence_length = $window * 2;
 
     # build heatmap with sentence starts
-    my $num_tokens      = $tokens->len;
-    my $tokens_arr      = $tokens->as_array;
-    my %heatmap         = ();
-    my $token_list_heat = $tokens->get_heat;
-    my $sentence_starts = $tokens->get_sentence_starts;
+    my $num_tokens           = $tokens->len;
+    my $tokens_arr           = $tokens->as_array;
+    my %heatmap              = ();
+    my $token_list_heat      = $tokens->get_heat;
+    my $heat_sentence_starts = $tokens->get_sentence_starts;
 
     # this regex is a sanity check for phrases. we replace the \ with a
     # more promiscuous check because the single space is too naive
     # for real text (e.g. st. john's)
     my $qre = $self->{_qre};
-    $qre =~ s/(\\ )+/.+/g;
+    my $query_has_phrase = $qre =~ s/(\\ )+/.+/g;
 
     if ( $self->debug ) {
-        warn "sentence_starts: " . dump($sentence_starts);
+        warn "heat_sentence_starts: " . dump($heat_sentence_starts);
         warn "token_list_heat: " . dump($token_list_heat);
     }
 
     # find the "sentence" that each hot token appears in.
     my @starts_ends;
-    my $i = 0;
+    my $i                  = 0;
+    my %heat_sentence_ends = ();    # cache
     for (@$token_list_heat) {
         my $token     = $tokens->get_token($_);
         my $token_pos = $token->pos;
-        my $start     = $sentence_starts->[ $i++ ];
+        my $start     = $heat_sentence_starts->[ $i++ ];
         $heatmap{$token_pos} = $token->is_hot;
-        my $end     = $start;
-        my $max_end = $start + $sentence_length;
-        $max_end = $num_tokens if $num_tokens < $max_end;
+
+        # a little optimization for when we've got
+        # multiple hot tokens in the same sentence
+        if ( exists $heat_sentence_ends{$start} ) {
+            $self->debug
+                and warn "found cached end $heat_sentence_ends{$start} "
+                . "for start $start token $token_pos\n";
+
+            push( @starts_ends,
+                [ $start, $token_pos, $heat_sentence_ends{$start} ] );
+            next;
+        }
+
+        # find the outermost limit of where this sentence might end
+        my $max_end;
+
+        # is there a "next" start?
+        if ( defined $heat_sentence_starts->[$i]
+            and $heat_sentence_starts->[$i] != $start )
+        {
+
+            # this token is unique in this non-final sentence
+            $max_end = $heat_sentence_starts->[$i] - 1;
+        }
+        else {
+
+            # this is the final sentence
+            $max_end = $num_tokens - 1;
+        }
+        my $end = $start;
+
+        # find the nearest sentence end to the start
         while ( $end < $max_end ) {
             my $tok = $tokens->get_token( $end++ );
             if ( !$tok ) {
@@ -186,7 +216,7 @@ sub _as_sentences {
                 last;
             }
             if ( $tok->is_sentence_end ) {
-                $end--;
+                $end--;    # move back one position
                 if ( $self->debug ) {
                     warn "tok $_ is_sentence_end end=$end";
                     $tok->dump;
@@ -195,18 +225,26 @@ sub _as_sentences {
             }
         }
 
-        # back up one if we've exceeded the 0-based tokens array.
-        $end-- if $end >= $num_tokens;
+        # back up if we've exceeded the 0-based tokens array.
+        $end = $num_tokens if $end > $num_tokens;
+
+        $self->debug
+            and warn "start=$start max_end=$max_end "
+            . "sentence_length=$sentence_length end=$end "
+            . "token_pos=$token_pos\n";
 
         # if we didn't yet set the actual hot token,
         # include everything up to it.
         if ( $end < $token_pos ) {
             $self->debug
-                and warn
-                "start=$start max_end=$max_end sentence_length=$sentence_length end=$end token_pos=$token_pos -- resetting end=$token_pos\n";
+                and warn "resetting end=$token_pos\n";
+
             $end = $token_pos;
         }
         push( @starts_ends, [ $start, $token_pos, $end ] );
+
+        # cache
+        $heat_sentence_ends{$start} = $end;
     }
 
     $self->debug and warn "starts_ends: " . dump( \@starts_ends );
@@ -243,6 +281,12 @@ START_END:
         }
         next unless $has_hot;
 
+        # the final string is a sentence end,
+        # but we only want the first char in it,
+        # and not any whitespace, stray punctuation or other
+        # non-word noise.
+        $strings[$#strings] =~ s/^([\.\?\!]).*/$1/;
+
         $span{start_end} = $start_end;
         $span{heat}      = $heat;
         $span{pos}       = \@cluster_pos;
@@ -251,7 +295,10 @@ START_END:
 
         # no false phrase matches if !_treat_phrases_as_singles
         # stemmer check because regex will likely fail when stemmer is on
-        if ( !$self->{_treat_phrases_as_singles} && !$self->{_stemmer} ) {
+        if (    $query_has_phrase
+            and !$self->{_treat_phrases_as_singles}
+            and !$self->{_stemmer} )
+        {
 
             #warn "_treat_phrases_as_singles NOT true";
             if ( $span{str} !~ m/$qre/ ) {
@@ -281,7 +328,7 @@ START_END:
         my $i    = 0;
         for (@cluster_pos) {
             if ( exists $heatmap{$_} ) {
-                $uniq{ $strings[$i] } += $heatmap{$_};
+                $uniq{ lc $strings[$i] } += $heatmap{$_};
             }
             $i++;
         }
@@ -322,7 +369,7 @@ sub _no_sentences {
     # more promiscuous check because the single space is too naive
     # for real text (e.g. st. john's)
     my $qre = $self->{_qre};
-    $qre =~ s/(\\ )+/.+/g;
+    my $query_has_phrase = $qre =~ s/(\\ )+/.+/g;
 
     # build heatmap
     my $num_tokens      = $tokens->len;
@@ -422,7 +469,10 @@ CLUSTER:
 
         # no false phrase matches if !_treat_phrases_as_singles
         # stemmer check because regex will likely fail when stemmer is on
-        if ( !$self->{_treat_phrases_as_singles} && !$self->{_stemmer} ) {
+        if (    $query_has_phrase
+            and !$self->{_treat_phrases_as_singles}
+            and !$self->{_stemmer} )
+        {
 
             #warn "_treat_phrases_as_singles NOT true";
             if ( $span{str} !~ m/$qre/ ) {
