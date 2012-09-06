@@ -11,7 +11,7 @@ use Search::Tools::HeatMap;
 
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.80';
+our $VERSION = '0.81';
 
 # extra space here so pmvers works against $VERSION
 our $ellip          = ' ... ';
@@ -191,6 +191,8 @@ sub _token {
     my $tokens = $self->{_tokenizer}->$method( $_[0], $heat_seeker );
 
     #$self->debug and $tokens->dump;
+
+    return $self->_dumb( $_[0] ) unless scalar @{ $tokens->get_heat };
 
     my $heatmap = Search::Tools::HeatMap->new(
         tokens                    => $tokens,
