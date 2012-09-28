@@ -12,7 +12,7 @@ use Search::Tools::UTF8;
 use Search::Tools::XML;
 use Search::Tools::RegEx;
 
-our $VERSION = '0.81';
+our $VERSION = '0.82';
 
 my $XML = Search::Tools::XML->new();
 my $C2E = $XML->char2ent_map;
@@ -477,6 +477,8 @@ sub _setup_regex_builder {
     #	one or more nonwordchar or whitespace, followed by
     #	any ignore_first_char
     # define for both text and html
+    # NOTE the first/last swap for plain vs html
+    # is intentional because of how regex are built.
 
     my @plain_phrase_bound = (
         ( length($ignore_last) ? qr/[$ignore_last]*/i : '' ),
