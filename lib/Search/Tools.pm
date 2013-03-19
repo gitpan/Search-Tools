@@ -6,7 +6,7 @@ use Carp;
 use Scalar::Util qw( openhandle );
 use File::Basename;
 
-our $VERSION = '0.91';
+our $VERSION = '0.92';
 
 use XSLoader;
 XSLoader::load( 'Search::Tools', $VERSION );
@@ -68,6 +68,8 @@ sub slurp {
         require IO::File;
         $fh = openhandle($file) || IO::File->new( $file, '<' );
     }
+
+    die "Failed to open $file: $!" unless $fh;
 
     while ( my $ln = $fh->getline ) {
         $buf .= $ln;

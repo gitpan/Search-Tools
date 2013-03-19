@@ -12,7 +12,7 @@ use Search::Tools::UTF8;
 use Search::Tools::XML;
 use Search::Tools::RegEx;
 
-our $VERSION = '0.91';
+our $VERSION = '0.92';
 
 my $XML = Search::Tools::XML->new();
 my $C2E = $XML->char2ent_map;
@@ -314,6 +314,10 @@ U: for my $u ( sort { $uniq{$a} <=> $uniq{$b} } keys %uniq ) {
         W: for my $w (@w) {
                 my $func = $self->stemmer;
                 my $f = &$func( $self, $w );
+                if ( !defined $f or !length $f ) {
+                    next W;
+                }
+                $f = to_utf8($f);
 
                 #warn "w: $w\nf: $f\n";
 
@@ -535,7 +539,7 @@ ${escaped}
 CHAR: foreach my $c (@char) {
         $counter++;
 
-        my $ent = $C2E->{$c} || carp "no entity defined for >$c< !\n";
+        my $ent = $C2E->{$c} || undef;
         my $num = ord($c);
 
         # if this is a special regexp char, protect it
@@ -549,7 +553,13 @@ CHAR: foreach my $c (@char) {
             next CHAR;
         }
 
-        my $aka = $ent eq "&#$num;" ? $ent : "$ent|&#$num;";
+        my $aka;
+        if ($ent) {
+            $aka = $ent eq "&#$num;" ? $ent : "$ent|&#$num;";
+        }
+        else {
+            $aka = "&#$num;";
+        }
 
         # make $c into a regexp
         $c = qr/$c|$aka/i unless $c eq "[$wild]*";
