@@ -4,7 +4,7 @@
       "Peter Karman <karman@cpan.org>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 6.62, CPAN::Meta::Converter version 2.112150",
+   "generated_by" : "ExtUtils::MakeMaker version 6.62, CPAN::Meta::Converter version 2.132510",
    "license" : [
       "perl_5"
    ],
@@ -22,23 +22,23 @@
    "prereqs" : {
       "build" : {
          "requires" : {
-            "ExtUtils::MakeMaker" : 0
+            "ExtUtils::MakeMaker" : "0"
          }
       },
       "configure" : {
          "requires" : {
-            "ExtUtils::MakeMaker" : 0
+            "ExtUtils::MakeMaker" : "0"
          }
       },
       "runtime" : {
          "requires" : {
-            "Data::Dump" : 0,
-            "Encode" : 0,
-            "Encoding::FixLatin" : 0,
-            "File::Basename" : 0,
-            "File::Slurp" : 0,
+            "Data::Dump" : "0",
+            "Encode" : "0",
+            "Encoding::FixLatin" : "0",
+            "File::Basename" : "0",
+            "File::Slurp" : "0",
             "Rose::ObjectX::CAF" : "0.03",
-            "Scalar::Util" : 0,
+            "Scalar::Util" : "0",
             "Search::Query" : "0.18",
             "Test::More" : "0.94",
             "perl" : "5.008003"
@@ -53,7 +53,10 @@
       "homepage" : "https://github.com/karpet/search-tools-perl",
       "license" : [
          "http://dev.perl.org/licenses/"
-      ]
+      ],
+      "repository" : {
+         "url" : "https://github.com/karpet/search-tools-perl"
+      }
    },
-   "version" : "0.96"
+   "version" : "0.97"
 }
