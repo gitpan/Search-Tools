@@ -6,7 +6,7 @@ use base qw( Search::Tools::Object );
 use Search::Tools;    # XS required
 use Search::Tools::UTF8;
 
-our $VERSION = '0.97';
+our $VERSION = '0.98';
 
 =pod
 
@@ -878,12 +878,22 @@ sub _array_to_xml {
     my ( $self, $perl, $root, $xml_ref, $strip_plural, $escape, $wrap_array )
         = @_;
     for my $thing (@$perl) {
-        if ( ref $thing and length($root) and $wrap_array ) {
+        if (    ref $thing
+            and ( ref $thing eq 'ARRAY' or ref $thing eq 'HASH' )
+            and length($root)
+            and $wrap_array )
+        {
+            #warn "<$root> ref $thing == " . ref($thing);
             $$xml_ref .= $self->start_tag($root);
         }
         $self->_ref_to_xml( $thing, $root, $xml_ref, $strip_plural, $escape,
             $wrap_array );
-        if ( ref $thing and length($root) and $wrap_array ) {
+        if (    ref $thing
+            and ( ref $thing eq 'ARRAY' or ref $thing eq 'HASH' )
+            and length($root)
+            and $wrap_array )
+        {
+            #warn "</$root> ref $thing == " . ref($thing);
             $$xml_ref .= $self->end_tag($root);
         }
     }
