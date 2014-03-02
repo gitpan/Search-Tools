@@ -11,7 +11,7 @@ use Search::Tools::HeatMap;
 
 use base qw( Search::Tools::Object );
 
-our $VERSION = '0.98';
+our $VERSION = '0.99';
 
 # extra space here so pmvers works against $VERSION
 our $ellip          = ' ... ';
@@ -792,16 +792,17 @@ Search::Tools::Snipper - extract terms in context
 
 =head1 SYNOPSIS
 
- my $query = [ qw/ quick dog / ];
+ use Search::Tools;
+ my $query = qw/ quick dog /;
  my $text  = 'the quick brown fox jumped over the lazy dog';
 
- my $s = Search::Tools::Snipper->new(
-            occur       => 3,
-            context     => 8,
-            word_len    => 5,
-            max_chars   => 300,
-            query       => $query
-            );
+ my $s = Search::Tools->snipper(
+     occur       => 3,
+     context     => 8,
+     word_len    => 5,
+     max_chars   => 300,
+     query       => $query
+ );
 
  print $s->snip( $text );
 
