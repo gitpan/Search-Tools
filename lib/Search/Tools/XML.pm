@@ -1,12 +1,12 @@
 package Search::Tools::XML;
-use strict;
-use warnings;
+use Moo;
 use Carp;
-use base qw( Search::Tools::Object );
 use Search::Tools;    # XS required
 use Search::Tools::UTF8;
 
-our $VERSION = '0.99';
+use namespace::sweep;
+
+our $VERSION = '0.999_01';
 
 =pod
 
@@ -1075,6 +1075,6 @@ same terms as Perl itself.
 
 =head1 SEE ALSO
 
-HTML::HiLiter, SWISH::HiLiter, Rose::Object, Class::XSAccessor, Text::Aspell
+HTML::HiLiter, SWISH::HiLiter, Class::XSAccessor, Text::Aspell
 
 =cut

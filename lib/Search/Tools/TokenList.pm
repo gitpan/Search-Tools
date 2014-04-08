@@ -1,6 +1,6 @@
 package Search::Tools::TokenList;
-use strict;
-use warnings;
+use Moo;
+with 'Search::Tools::TokenListUtils';
 use overload
     '""'     => sub { $_[0]->str; },
     'bool'   => sub { 1 }, # always true
@@ -8,9 +8,10 @@ use overload
 
 use Search::Tools;    # XS required
 use Carp;
-use base qw( Search::Tools::TokenListUtils );
 
-our $VERSION = '0.99';
+use namespace::sweep;
+
+our $VERSION = '0.999_01';
 
 1;
 

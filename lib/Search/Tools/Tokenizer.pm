@@ -1,21 +1,18 @@
 package Search::Tools::Tokenizer;
-use strict;
-use warnings;
-use base qw( Search::Tools::Object );
+use Moo;
+extends 'Search::Tools::Object';
 use Search::Tools;    # XS package required
 use Search::Tools::Token;
 use Search::Tools::TokenList;
 use Search::Tools::UTF8;
 use Carp;
 
-our $VERSION = '0.99';
+our $VERSION = '0.999_01';
 
-__PACKAGE__->mk_accessors(qw( re ));
+has 're' => ( is => 'rw', default => sub {qr/\w+(?:[\'\-\.]\w+)*/} );
 
-sub init {
+sub BUILD {
     my $self = shift;
-    $self->SUPER::init(@_);
-    $self->{re} ||= qr/\w+(?:[\'\-\.]\w+)*/;
     if ( $self->debug ) {
         $self->set_debug( $self->debug - 1 );    # XS debug a level higher
     }

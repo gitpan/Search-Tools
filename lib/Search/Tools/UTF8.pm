@@ -27,7 +27,7 @@ our @EXPORT = qw(
 
 our $Debug = ( $ENV{PERL_DEBUG} && $ENV{PERL_DEBUG} > 2 ) ? 1 : 0;
 
-our $VERSION = '0.99';
+our $VERSION = '0.999_01';
 
 sub to_utf8 {
     my $str = shift;
@@ -396,6 +396,6 @@ same terms as Perl itself.
 
 =head1 SEE ALSO
 
-HTML::HiLiter, SWISH::HiLiter, Rose::Object, Class::XSAccessor, Text::Aspell
+HTML::HiLiter, SWISH::HiLiter, Class::XSAccessor, Text::Aspell
 
 =cut

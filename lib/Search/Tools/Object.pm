@@ -1,14 +1,19 @@
 package Search::Tools::Object;
-use strict;
-use warnings;
-use Carp;
-use base qw( Rose::ObjectX::CAF );
-use Scalar::Util qw( blessed );
-use Search::Tools::MethodMaker;
+use Moo;
+use namespace::sweep;
 
-our $VERSION = '0.99';
+has 'debug' => (
+    is      => 'rw',
+    default => sub { $ENV{PERL_DEBUG} || 0 },
+    coerce  => sub {
+        return 0 if !$_[0];    # allow for undef or zero
+        return $_[0];
+    }
+);
 
-__PACKAGE__->mk_accessors(qw( debug ));
+our $VERSION = '0.999_01';
+
+1;
 
 =pod
 
@@ -19,17 +24,10 @@ Search::Tools::Object - base class for Search::Tools objects
 =head1 SYNOPSIS
 
  package MyClass;
- use base qw( Search::Tools::Object );
- 
- __PACKAGE__->mk_accessors( qw( foo bar ) );
- 
- sub init {
-    my $self = shift;
-    $self->SUPER::init(@_);
-
-    # do stuff to set up object
-    
- }
+ use Moo;
+ extends 'Search::Tools::Object';
+ has 'foo' => ( is => 'rw' );
+ has 'bar' => ( is => 'rw' );
  
  1;
  
@@ -42,86 +40,18 @@ Search::Tools::Object - base class for Search::Tools objects
 
 =head1 DESCRIPTION
 
-Search::Tools::Object is a subclass of Rose::Object. Prior to version 0.24
-STO was a subclass of Class::Accessor::Fast. Backwards compatability for
-the mk_accessors() and mk_ro_accessors() class methods are preserved
-via Search::Tools::MethodMaker.
+Search::Tools::Object is a simple Moo subclass. 
+
+Prior to version 1.00 STO was a subclass of Rose::ObjectX::CAF.
+
+Prior to version 0.24 STO was a subclass of Class::Accessor::Fast. 
 
 =head1 METHODS
-
-=cut
-
-sub _init {
-    croak "use init() instead";
-}
-
-=head2 init
-
-Overrides base Rose::Object method. Rather than calling
-the method name for each param passed in new(), the value
-is simply set in the object as a hash ref. This assumes
-every Search::Tools::Object is a blessed hash ref.
-
-The reason the hash is preferred over the method call
-is to support read-only accessors, which will croak
-if init() tried to set values with them.
-
-=cut
-
-sub init {
-    my $self = shift(@_);
-    $self->SUPER::init(@_);
-    $self->{debug} ||= $ENV{PERL_DEBUG} || 0;
-    return $self;
-}
 
 =head2 debug( I<n> )
 
 Get/set the debug value for the object. All objects inherit this attribute.
 You can use the C<PERL_DEBUG> env var to set this value as well.
-
-=cut
-
-# called by some subclasses
-sub _normalize_args {
-    my $self  = shift;
-    my %args  = @_;
-    my $q     = delete $args{query};
-    my $debug = delete $args{debug};
-    if ( !defined $q ) {
-        croak "query required";
-    }
-    if ( !ref($q) ) {
-        require Search::Tools::QueryParser;
-        $args{query} = Search::Tools::QueryParser->new(
-            debug => $debug,
-            map { $_ => delete $args{$_} }
-                grep { Search::Tools::QueryParser->can($_) } keys %args
-        )->parse($q);
-    }
-    elsif ( ref($q) eq 'ARRAY' ) {
-        carp "query ARRAY ref deprecated as of version 0.24";
-        require Search::Tools::QueryParser;
-        $args{query} = Search::Tools::QueryParser->new(
-            debug => $debug,
-            map { $_ => delete $args{$_} }
-                grep { Search::Tools::QueryParser->can($_) } keys %args
-        )->parse( join( ' ', @$q ) );
-    }
-    elsif ( blessed($q) and $q->isa('Search::Tools::Query') ) {
-        $args{query} = $q;
-    }
-    else {
-        croak
-            "query param required to be a scalar string or Search::Tools::Query object";
-    }
-    $args{debug} = $debug;    # restore so it can be passed on
-    return %args;
-}
-
-1;
-
-__END__
 
 =head1 AUTHOR
 

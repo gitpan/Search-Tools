@@ -1,7 +1,5 @@
 package Search::Tools::Token;
-use strict;
-use warnings;
-use Carp;
+use Moo;
 use overload
     '""'     => sub { $_[0]->str; },
     'bool'   => sub { $_[0]->len; },
@@ -9,7 +7,7 @@ use overload
 
 use Search::Tools;    # XS required
 
-our $VERSION = '0.99';
+our $VERSION = '0.999_01';
 
 1;
 
