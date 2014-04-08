@@ -11,7 +11,7 @@ has 'debug' => (
     }
 );
 
-our $VERSION = '0.999_01';
+our $VERSION = '0.999_02';
 
 1;
 

@@ -39,7 +39,7 @@
             "File::Basename" : "0",
             "File::Slurp" : "0",
             "Scalar::Util" : "0",
-            "Search::Query" : "0.30",
+            "Search::Query" : "0.290_01",
             "Test::More" : "0.94",
             "perl" : "5.008003"
          }
@@ -58,5 +58,5 @@
          "url" : "https://github.com/karpet/search-tools-perl"
       }
    },
-   "version" : "0.999_01"
+   "version" : "0.999_02"
 }
