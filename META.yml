@@ -28,10 +28,11 @@ requires:
   Scalar::Util: '0'
   Search::Query: 0.290_01
   Test::More: '0.94'
+  namespace::sweep: '0'
   perl: '5.008003'
 resources:
   bugtracker: http://rt.cpan.org/NoAuth/Bugs.html?Dist=Search-Tools
   homepage: https://github.com/karpet/search-tools-perl
   license: http://dev.perl.org/licenses/
   repository: https://github.com/karpet/search-tools-perl
-version: 0.999_03
+version: 0.999_04

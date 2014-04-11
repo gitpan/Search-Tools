@@ -42,6 +42,7 @@
             "Scalar::Util" : "0",
             "Search::Query" : "0.290_01",
             "Test::More" : "0.94",
+            "namespace::sweep" : "0",
             "perl" : "5.008003"
          }
       }
@@ -59,5 +60,5 @@
          "url" : "https://github.com/karpet/search-tools-perl"
       }
    },
-   "version" : "0.999_03"
+   "version" : "0.999_04"
 }
