@@ -26,7 +26,7 @@ requires:
   File::Slurp: '0'
   Moo: '0'
   Scalar::Util: '0'
-  Search::Query: 0.290_01
+  Search::Query: '0.300'
   Test::More: '0.94'
   namespace::sweep: '0'
   perl: '5.008003'
@@ -35,4 +35,4 @@ resources:
   homepage: https://github.com/karpet/search-tools-perl
   license: http://dev.perl.org/licenses/
   repository: https://github.com/karpet/search-tools-perl
-version: 0.999_04
+version: '1.000'
