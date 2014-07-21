@@ -27,7 +27,7 @@ our @EXPORT = qw(
 
 our $Debug = ( $ENV{PERL_DEBUG} && $ENV{PERL_DEBUG} > 2 ) ? 1 : 0;
 
-our $VERSION = '1.000';
+our $VERSION = '1.000_01';
 
 sub to_utf8 {
     my $str = shift;
@@ -38,14 +38,18 @@ sub to_utf8 {
         $Debug and carp "string '$str' is flagged utf8 already";
         return $str;
     }
-    if ( is_valid_utf8($str) ) {
-        my $newstr = Encode::decode_utf8( $str, 1 );
-        $Debug and carp "string '$str' is valid utf8; utf8 flag turned on";
-        return $newstr;
-    }
     if ( is_ascii($str) ) {
         Encode::_utf8_on($str);
         $Debug and carp "string '$str' is ascii; utf8 flag turned on";
+        return $str;
+    }
+    if ( is_valid_utf8($str) ) {
+
+        # we got here only because the flag was off and it wasn't ascii.
+        # however, is_valid_utf8() claims that it is valid internal UTF8,
+        # so just turn the flag on.
+        Encode::_utf8_on($str);
+        $Debug and carp "string '$str' is valid utf8; utf8 flag turned on";
         return $str;
     }
 

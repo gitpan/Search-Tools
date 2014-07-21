@@ -7,7 +7,7 @@ build_requires:
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 6.6302, CPAN::Meta::Converter version 2.120630'
+generated_by: 'ExtUtils::MakeMaker version 6.6302, CPAN::Meta::Converter version 2.140640'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -23,7 +23,6 @@ requires:
   Encode: '0'
   Encoding::FixLatin: '0'
   File::Basename: '0'
-  File::Slurp: '0'
   Moo: '0'
   Scalar::Util: '0'
   Search::Query: '0.300'
@@ -35,4 +34,4 @@ resources:
   homepage: https://github.com/karpet/search-tools-perl
   license: http://dev.perl.org/licenses/
   repository: https://github.com/karpet/search-tools-perl
-version: '1.000'
+version: 1.000_01
