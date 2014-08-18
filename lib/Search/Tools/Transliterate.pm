@@ -10,7 +10,7 @@ use Data::Dump qw( dump );
 has 'ebit' => ( is => 'rw', default => sub {1} );
 has 'map' => ( is => 'ro' );
 
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 
 =pod
 
@@ -174,7 +174,12 @@ sub _init_map {
 
     while (<DATA>) {
         chomp;
+        next unless m/^<U/;
         my ( $from, $to ) = (m/^(<U.+?>)\ (.+)$/);
+        if ( !defined $to ) {
+            warn "Undefined mapping for $_\n";
+            next;
+        }
         my @o = split( /;/, $to );
         $MAP{ _Utag_to_chr($from) } = _Utag_to_chr( $o[0] );
     }

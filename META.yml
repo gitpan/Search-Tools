@@ -34,4 +34,4 @@ resources:
   homepage: https://github.com/karpet/search-tools-perl
   license: http://dev.perl.org/licenses/
   repository: https://github.com/karpet/search-tools-perl
-version: '1.001'
+version: '1.002'
